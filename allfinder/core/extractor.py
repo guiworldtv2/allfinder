@@ -22,6 +22,7 @@ class M3U8Extractor:
         self.timeout = timeout
         self.found_urls: List[str] = []
         self.thumbnail_url: Optional[str] = None
+        self.page_title: str = "Stream"
 
     async def _handle_request(self, request: Request):
         url = request.url
@@ -33,12 +34,61 @@ class M3U8Extractor:
                     if "playlist.m3u8" in url.lower() or "chunklist.m3u8" in url.lower():
                         print(f"[!] STREAM DETECTADO: {url[:80]}...")
 
+    async def _update_metadata(self, page: Page):
+        """Tenta capturar o melhor título e thumbnail disponíveis no momento."""
+        try:
+            metadata = await page.evaluate("""() => {
+                const getMeta = (name) => {
+                    const el = document.querySelector(`meta[property="${name}"], meta[name="${name}"], meta[property="og:${name}"], meta[name="twitter:${name}"]`);
+                    return el ? el.getAttribute('content') : null;
+                };
+                
+                // Seletores específicos para sites de notícias e globoplay
+                const titleSelectors = [
+                    'h1.video-title', 
+                    'h1.LiveVideo__Title', 
+                    'h1.video-info__title', 
+                    '.VideoInfo__Title', 
+                    '.video-title-container h1',
+                    'h1'
+                ];
+                
+                let foundTitle = null;
+                for (const sel of titleSelectors) {
+                    const el = document.querySelector(sel);
+                    if (el && el.innerText.trim().length > 5) {
+                        foundTitle = el.innerText.trim();
+                        break;
+                    }
+                }
+
+                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
+                
+                return {
+                    title: foundTitle || metaTitle || document.title,
+                    og_image: getMeta('og:image'),
+                    twitter_image: getMeta('twitter:image'),
+                    poster: document.querySelector('video') ? document.querySelector('video').getAttribute('poster') : null
+                };
+            }""")
+            
+            if metadata.get('title') and len(metadata['title']) > 5:
+                self.page_title = metadata['title']
+            
+            # Só atualiza thumbnail se não tiver uma melhor (como a da Globo via ID)
+            if not self.thumbnail_url or "glbimg.com" not in self.thumbnail_url:
+                new_thumb = metadata.get('og_image') or metadata.get('twitter_image') or metadata.get('poster')
+                if new_thumb:
+                    self.thumbnail_url = new_thumb
+        except:
+            pass
+
     async def extract(self, url: str, interaction_func: Optional[Callable[[Page], asyncio.Future]] = None) -> Dict[str, Any]:
         ensure_playwright_browsers()
         
         self.found_urls = []
         self.thumbnail_url = None
-        page_title = "Stream"
+        self.page_title = "Stream"
         
         async with async_playwright() as p:
             try:
@@ -61,55 +111,27 @@ class M3U8Extractor:
             
             print(f"[*] Navegando para: {url}")
             try:
-                # Carrega a página até o DOM estar pronto
+                # Carrega a página
                 await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
                 
-                # Lógica de Thumbnail específica para Globo baseada no ID do vídeo
+                # Lógica de Thumbnail específica para Globo
                 if "globo.com" in url:
                     video_id_match = re.search(r'/v/(\d+)', url)
                     if video_id_match:
-                        video_id = video_id_match.group(1)
-                        self.thumbnail_url = f"https://s04.video.glbimg.com/x720/{video_id}.jpg"
-                        print(f"[*] Thumbnail Globo detectada: {self.thumbnail_url}")
-
-                # Espera curta para garantir que títulos dinâmicos carreguem
-                await asyncio.sleep(3)
-                
-                # Extração de Metadados
-                metadata = await page.evaluate("""() => {
-                    const getMeta = (name) => {
-                        const el = document.querySelector(`meta[property="${name}"], meta[name="${name}"], meta[property="og:${name}"]`);
-                        return el ? el.getAttribute('content') : null;
-                    };
-                    
-                    const h1 = document.querySelector('h1.video-title, h1.LiveVideo__Title, h1.title, h1.video-info__title');
-                    const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
-                    
-                    return {
-                        title: h1 ? h1.innerText : (metaTitle || document.title),
-                        og_image: getMeta('og:image'),
-                        twitter_image: getMeta('twitter:image'),
-                        poster: document.querySelector('video') ? document.querySelector('video').getAttribute('poster') : null
-                    };
-                }""")
-                
-                page_title = metadata.get('title') or page_title
-                if not self.thumbnail_url:
-                    self.thumbnail_url = metadata.get('og_image') or metadata.get('twitter_image') or metadata.get('poster')
+                        self.thumbnail_url = f"https://s04.video.glbimg.com/x720/{video_id_match.group(1)}.jpg"
 
                 if interaction_func:
-                    print("[*] Executando interações...")
                     await interaction_func(page)
-                else:
-                    print("[*] Monitorando rede por streams...")
-                    # Espera ativa por até 30 segundos, mas sem fechar imediatamente ao achar
-                    # para dar tempo de outras requisições de metadados se necessário
-                    for _ in range(30):
-                        if any("playlist.m3u8" in u.lower() for u in self.found_urls):
-                            # Espera um respiro final
-                            await asyncio.sleep(2)
+                
+                # Monitoramento Contínuo: Metadados + Rede
+                print("[*] Extraindo metadados e monitorando rede...")
+                for i in range(30):
+                    await self._update_metadata(page)
+                    # Se já achamos o link principal e um título decente, podemos parar
+                    if any("playlist.m3u8" in u.lower() for u in self.found_urls) and self.page_title != "Stream":
+                        if i > 5: # Garante pelo menos 5s para o título estabilizar
                             break
-                        await asyncio.sleep(1)
+                    await asyncio.sleep(1)
             except Exception as e:
                 if not self.found_urls:
                     print(f"[!] Erro durante a extração: {e}")
@@ -117,7 +139,7 @@ class M3U8Extractor:
                 await browser.close()
         
         return {
-            "title": page_title.strip(),
+            "title": self.page_title.strip(),
             "m3u8_urls": self.found_urls,
             "thumbnail": self.thumbnail_url
         }
