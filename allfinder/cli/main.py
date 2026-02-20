@@ -2,12 +2,12 @@ import asyncio
 import argparse
 from urllib.parse import urlparse
 
-from m3u8_extractor.core.extractor import M3U8Extractor
-from m3u8_extractor.plugins.manager import PluginManager
-from m3u8_extractor.plugins.base import GenericPlugin
+from allfinder.core.extractor import M3U8Extractor
+from allfinder.plugins.manager import PluginManager
+from allfinder.plugins.base import GenericPlugin
 
 async def main():
-    parser = argparse.ArgumentParser(description="Extrai URLs .m3u8 de sites de streaming.")
+    parser = argparse.ArgumentParser(description="allfinder: Extrai URLs .m3u8 de sites de streaming.")
     parser.add_argument("url", help="A URL do site de streaming para extrair o m3u8.")
     parser.add_argument("--headless", action="store_true", help="Executa o navegador em modo headless (sem interface gráfica).")
     parser.add_argument("--timeout", type=int, default=30000, help="Tempo limite em milissegundos para operações do navegador.")

@@ -1,4 +1,4 @@
-# M3U8-Extractor-Bot
+# allfinder
 
 Uma ferramenta em Python para extrair URLs `.m3u8` de sites de streaming, utilizando automação de navegador (Playwright) para simular a interação do usuário e interceptar requisições de rede.
 
@@ -6,7 +6,8 @@ Uma ferramenta em Python para extrair URLs `.m3u8` de sites de streaming, utiliz
 
 *   **Extração de M3U8:** Captura URLs `.m3u8` que são carregadas dinamicamente após a interação com a página.
 *   **Automação de Navegador:** Utiliza Playwright para abrir uma instância de navegador, navegar até a URL fornecida e interagir com a página (ex: clicar no botão de play).
-*   **Sistema de Plugins:** Permite a criação de plugins específicos para diferentes sites, possibilitando interações customizadas para garantir a extração do `.m3u8`.
+*   **Auto-Instalação:** O navegador necessário é instalado automaticamente na primeira execução.
+*   **Sistema de Plugins:** Permite a criação de plugins específicos para diferentes sites.
 *   **Modo Headless:** Suporte para execução em modo headless (sem interface gráfica) para ambientes de servidor.
 
 ## Instalação
@@ -16,8 +17,7 @@ Para instalar a ferramenta globalmente e usá-la em qualquer lugar do seu termin
 1.  **Instale diretamente do GitHub:**
 
     ```bash
-    pip install git+https://github.com/seu-usuario/m3u8-extractor-bot.git
-    playwright install chromium
+    pip install git+https://github.com/guiworldtv2/allfinder.git
     ```
 
 Ou, se preferir instalar localmente para desenvolvimento:
@@ -25,24 +25,23 @@ Ou, se preferir instalar localmente para desenvolvimento:
 1.  **Clone e instale em modo editável:**
 
     ```bash
-    git clone https://github.com/seu-usuario/m3u8-extractor-bot.git
-    cd m3u8-extractor-bot
+    git clone https://github.com/guiworldtv2/allfinder.git
+    cd allfinder
     pip install -e .
-    playwright install chromium
     ```
 
 ## Uso
 
-Após a instalação, o comando `m3u8-bot` estará disponível no seu terminal:
+Após a instalação, o comando `allfinder` estará disponível no seu terminal:
 
 ```bash
-m3u8-bot <URL_DO_SITE>
+allfinder <URL_DO_SITE>
 ```
 
 **Exemplo:**
 
 ```bash
-python src/cli/main.py https://exemplo.com/video-com-streaming
+allfinder https://exemplo.com/video-com-streaming
 ```
 
 ### Opções
@@ -50,21 +49,6 @@ python src/cli/main.py https://exemplo.com/video-com-streaming
 *   `--headless`: Executa o navegador em modo headless (padrão). Para ver a interface gráfica, use `--no-headless`.
 *   `--timeout <milissegundos>`: Define o tempo limite para operações do navegador (padrão: 30000ms).
 
-## Como Adicionar Suporte a Novos Sites (Plugins)
-
-O sistema de plugins permite estender a funcionalidade para sites específicos. Para adicionar suporte a um novo site:
-
-1.  Crie um novo arquivo Python dentro de `src/plugins/` (ex: `meusite_plugin.py`).
-2.  Neste arquivo, crie uma classe que herde de `BasePlugin` e implemente os métodos `name`, `domain_pattern` e `interact`.
-    *   `name`: Um nome descritivo para o seu plugin.
-    *   `domain_pattern`: Uma expressão regular que corresponda ao domínio do site que você quer suportar (ex: `r"meusite\.com"`).
-    *   `interact(self, page: Page)`: Contém a lógica de interação com a página. Aqui você pode usar as funções do Playwright (ex: `page.click()`, `page.wait_for_selector()`) para simular as ações do usuário até que o vídeo comece a carregar e o `.m3u8` seja detectado.
-3.  Registre seu plugin no `src/cli/main.py` importando-o e adicionando-o ao `plugin_manager`.
-
-## Contribuição
-
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues, enviar pull requests ou sugerir melhorias.
-
 ## Licença
 
-Este projeto está licenciado sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
+Este projeto está licenciado sob a licença MIT.
