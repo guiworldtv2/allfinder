@@ -1,37 +1,56 @@
 import asyncio
 import argparse
-from urllib.parse import urlparse
-
+from typing import List
 from allfinder.core.extractor import M3U8Extractor
 from allfinder.plugins.manager import PluginManager
 from allfinder.plugins.base import GenericPlugin
 
+async def process_url(url: str, extractor: M3U8Extractor, plugin_manager: PluginManager):
+    plugin = plugin_manager.get_plugin_for_url(url)
+    print(f"\n[*] Processando: {url}")
+    print(f"[*] Usando plugin: {plugin.name}")
+    
+    urls = await extractor.extract(url, plugin.interact)
+    return {"url": url, "m3u8_urls": urls}
+
 async def main():
     parser = argparse.ArgumentParser(description="allfinder: Extrai URLs .m3u8 de sites de streaming.")
-    parser.add_argument("url", help="A URL do site de streaming para extrair o m3u8.")
-    parser.add_argument("--headless", action="store_true", help="Executa o navegador em modo headless (sem interface gráfica).")
-    parser.add_argument("--timeout", type=int, default=30000, help="Tempo limite em milissegundos para operações do navegador.")
+    parser.add_argument("urls", nargs="+", help="Uma ou mais URLs de sites de streaming.")
+    parser.add_argument("--headless", action="store_true", default=True, help="Executa o navegador em modo headless.")
+    parser.add_argument("--no-headless", action="store_false", dest="headless", help="Executa o navegador com interface gráfica.")
+    parser.add_argument("--timeout", type=int, default=60000, help="Tempo limite em milissegundos.")
+    parser.add_argument("--output", "-o", help="Caminho para salvar o arquivo .m3u resultante.")
 
     args = parser.parse_args()
 
     extractor = M3U8Extractor(headless=args.headless, timeout=args.timeout)
     plugin_manager = PluginManager()
-    
-    # Registrar plugins aqui. Por enquanto, apenas o genérico.
     plugin_manager.register_plugin(GenericPlugin())
 
-    plugin = plugin_manager.get_plugin_for_url(args.url)
+    results = []
+    for url in args.urls:
+        res = await process_url(url, extractor, plugin_manager)
+        results.append(res)
 
-    print(f"[*] Usando plugin: {plugin.name}")
-
-    m3u8_urls = await extractor.extract(args.url, plugin.interact)
-
-    if m3u8_urls:
-        print("\n[+] URLs M3U8 encontradas:")
-        for url in m3u8_urls:
-            print(f"    - {url}")
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write("#EXTM3U\n")
+            for res in results:
+                if res["m3u8_urls"]:
+                    # Usa o primeiro link encontrado como principal
+                    main_url = res["m3u8_urls"][0]
+                    f.write(f"#EXTINF:-1, Stream de {res['url']}\n")
+                    f.write(f"{main_url}\n")
+        print(f"\n[✓] Arquivo '{args.output}' gerado com sucesso!")
     else:
-        print("\n[-] Nenhuma URL M3U8 encontrada.")
+        print("\n[+] Resultados da Extração:")
+        for res in results:
+            print(f"\nURL: {res['url']}")
+            if res["m3u8_urls"]:
+                for u in res["m3u8_urls"]:
+                    print(f"  - {u}")
+            else:
+                print("  [-] Nenhum link m3u8 encontrado.")
 
 def main_entry():
     asyncio.run(main())
