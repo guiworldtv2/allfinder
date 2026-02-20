@@ -1,7 +1,6 @@
 import re
-from typing import List, Optional
-from playwright.async_api import Page
-from .base import BasePlugin, GenericPlugin
+from typing import List
+from m3u8_extractor.plugins.base import BasePlugin, GenericPlugin
 
 class PluginManager:
     def __init__(self):

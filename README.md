@@ -11,33 +11,32 @@ Uma ferramenta em Python para extrair URLs `.m3u8` de sites de streaming, utiliz
 
 ## Instalação
 
-1.  **Clone o repositório:**
+Para instalar a ferramenta globalmente e usá-la em qualquer lugar do seu terminal:
+
+1.  **Instale diretamente do GitHub:**
+
+    ```bash
+    pip install git+https://github.com/seu-usuario/m3u8-extractor-bot.git
+    playwright install chromium
+    ```
+
+Ou, se preferir instalar localmente para desenvolvimento:
+
+1.  **Clone e instale em modo editável:**
 
     ```bash
     git clone https://github.com/seu-usuario/m3u8-extractor-bot.git
     cd m3u8-extractor-bot
-    ```
-
-2.  **Crie e ative um ambiente virtual (opcional, mas recomendado):**
-
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate  # No Windows: .\venv\Scripts\activate
-    ```
-
-3.  **Instale as dependências:**
-
-    ```bash
-    pip install -r requirements.txt
+    pip install -e .
     playwright install chromium
     ```
 
 ## Uso
 
-Para extrair URLs `.m3u8`, execute o script `main.py` com a URL do site de streaming:
+Após a instalação, o comando `m3u8-bot` estará disponível no seu terminal:
 
 ```bash
-python src/cli/main.py <URL_DO_SITE>
+m3u8-bot <URL_DO_SITE>
 ```
 
 **Exemplo:**

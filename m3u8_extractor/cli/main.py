@@ -1,14 +1,10 @@
 import asyncio
 import argparse
-import sys
 from urllib.parse import urlparse
 
-# Adiciona o diretório raiz do projeto ao sys.path para importações relativas
-sys.path.append('/home/ubuntu/m3u8-extractor/src')
-
-from core.extractor import M3U8Extractor
-from plugins.manager import PluginManager
-from plugins.base import GenericPlugin # Importar GenericPlugin para registro
+from m3u8_extractor.core.extractor import M3U8Extractor
+from m3u8_extractor.plugins.manager import PluginManager
+from m3u8_extractor.plugins.base import GenericPlugin
 
 async def main():
     parser = argparse.ArgumentParser(description="Extrai URLs .m3u8 de sites de streaming.")
@@ -24,7 +20,6 @@ async def main():
     # Registrar plugins aqui. Por enquanto, apenas o genérico.
     plugin_manager.register_plugin(GenericPlugin())
 
-    parsed_url = urlparse(args.url)
     plugin = plugin_manager.get_plugin_for_url(args.url)
 
     print(f"[*] Usando plugin: {plugin.name}")
@@ -38,5 +33,8 @@ async def main():
     else:
         print("\n[-] Nenhuma URL M3U8 encontrada.")
 
-if __name__ == "__main__":
+def main_entry():
     asyncio.run(main())
+
+if __name__ == "__main__":
+    main_entry()
