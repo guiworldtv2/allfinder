@@ -2,20 +2,17 @@ import asyncio
 import re
 import sys
 import subprocess
-from typing import Optional, List, Callable
+from typing import Optional, List, Callable, Dict, Any
 from playwright.async_api import async_playwright, Request, Page, Browser
 
 def ensure_playwright_browsers():
     """Garante que os navegadores e dependências do sistema do Playwright estejam instalados."""
     try:
-        # Tenta verificar se já está instalado para ser mais rápido
         subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True, capture_output=True)
     except Exception:
         print("[*] Verificando/Instalando dependências do navegador...")
-        # No Colab, precisamos de sudo para install-deps
         is_colab = 'google.colab' in sys.modules or subprocess.run(['which', 'sudo'], capture_output=True).returncode == 0
         cmd_prefix = ['sudo'] if is_colab else []
-        
         subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install", "chromium"], check=True)
         subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"], check=True)
 
@@ -24,31 +21,38 @@ class M3U8Extractor:
         self.headless = headless
         self.timeout = timeout
         self.found_urls: List[str] = []
+        self.thumbnail_url: Optional[str] = None
 
     async def _handle_request(self, request: Request):
         url = request.url
+        # Captura M3U8
         if ".m3u8" in url.lower():
             blacklist = ["youbora", "analytics", "telemetry", "log", "metrics", "heartbeat", "omtrdc"]
             if not any(word in url.lower() for word in blacklist):
                 if url not in self.found_urls:
                     self.found_urls.append(url)
                     if "playlist.m3u8" in url.lower() or "chunklist.m3u8" in url.lower():
-                        print(f"[!] STREAM DETECTADO: {url[:100]}...")
-                    else:
-                        print(f"[+] M3U8 encontrado: {url[:100]}...")
+                        print(f"[!] STREAM DETECTADO: {url[:80]}...")
+        
+        # Captura Thumbnail (busca por imagens grandes ou padrões de capa)
+        if not self.thumbnail_url and any(ext in url.lower() for ext in [".jpg", ".jpeg", ".png"]):
+            if "poster" in url.lower() or "thumb" in url.lower() or "cover" in url.lower() or "background" in url.lower():
+                self.thumbnail_url = url
 
-    async def extract(self, url: str, interaction_func: Optional[Callable[[Page], asyncio.Future]] = None) -> List[str]:
+    async def extract(self, url: str, interaction_func: Optional[Callable[[Page], asyncio.Future]] = None) -> Dict[str, Any]:
         ensure_playwright_browsers()
         
         self.found_urls = []
+        self.thumbnail_url = None
+        page_title = "Stream"
+        
         async with async_playwright() as p:
             try:
                 browser: Browser = await p.chromium.launch(
                     headless=self.headless,
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
                 )
-            except Exception as e:
-                print(f"[!] Erro ao iniciar navegador: {e}. Tentando reinstalar...")
+            except Exception:
                 ensure_playwright_browsers()
                 browser: Browser = await p.chromium.launch(
                     headless=self.headless,
@@ -63,28 +67,26 @@ class M3U8Extractor:
             
             print(f"[*] Navegando para: {url}")
             try:
-                # Mudança estratégica: wait_until="domcontentloaded" é muito mais rápido que "networkidle"
                 await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
+                page_title = await page.title()
                 
-                # Executa interações ou espera um pouco
                 if interaction_func:
                     print("[*] Executando interações...")
                     await interaction_func(page)
                 else:
-                    # Espera ativa: verifica a cada segundo se já encontramos algo
-                    print("[*] Monitorando rede por até 30s...")
-                    for _ in range(30):
+                    print("[*] Monitorando rede...")
+                    for _ in range(25):
                         if any("playlist.m3u8" in u.lower() for u in self.found_urls):
-                            print("[*] Link principal encontrado! Finalizando...")
                             break
                         await asyncio.sleep(1)
             except Exception as e:
-                # Se houver timeout mas já encontramos links, ignoramos o erro
-                if self.found_urls:
-                    print(f"[*] Timeout atingido, mas {len(self.found_urls)} links foram capturados.")
-                else:
+                if not self.found_urls:
                     print(f"[!] Erro durante a extração: {e}")
             finally:
                 await browser.close()
         
-        return self.found_urls
+        return {
+            "title": page_title,
+            "m3u8_urls": self.found_urls,
+            "thumbnail": self.thumbnail_url
+        }
