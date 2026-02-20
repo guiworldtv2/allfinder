@@ -16,7 +16,7 @@ dependencies = [
 m3u8-bot = "m3u8_extractor.cli.main:main_entry"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 
 [tool.setuptools.package-dir]
-"" = "src"
+"" = "."

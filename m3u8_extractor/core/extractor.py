@@ -1,7 +1,21 @@
 import asyncio
 import re
+import sys
+import subprocess
 from typing import Optional, List, Callable
 from playwright.async_api import async_playwright, Request, Page, Browser
+
+def ensure_playwright_browsers():
+    """Garante que os navegadores do Playwright estejam instalados."""
+    try:
+        # Tenta rodar o comando de instalação. O Playwright é inteligente o suficiente
+        # para não baixar nada se já estiver instalado.
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], 
+                       check=True, capture_output=True, text=True)
+    except Exception:
+        # Se falhar silenciosamente (ex: sem capture_output), tenta de forma visível
+        print("[*] Verificando/Instalando dependências do navegador...")
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
 
 class M3U8Extractor:
     def __init__(self, headless: bool = True, timeout: int = 30000):
@@ -18,9 +32,18 @@ class M3U8Extractor:
                 print(f"[+] Encontrado M3U8: {url}")
 
     async def extract(self, url: str, interaction_func: Optional[Callable[[Page], asyncio.Future]] = None) -> List[str]:
+        # Garante o navegador antes de iniciar
+        ensure_playwright_browsers()
+        
         self.found_urls = []
         async with async_playwright() as p:
-            browser: Browser = await p.chromium.launch(headless=self.headless)
+            try:
+                browser: Browser = await p.chromium.launch(headless=self.headless)
+            except Exception:
+                # Caso a primeira tentativa falhe por falta de binários, força a instalação
+                ensure_playwright_browsers()
+                browser: Browser = await p.chromium.launch(headless=self.headless)
+
             # User agent comum para evitar bloqueios básicos
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"

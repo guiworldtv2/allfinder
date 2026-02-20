@@ -1,0 +1,2 @@
+[console_scripts]
+m3u8-bot = m3u8_extractor.cli.main:main_entry
