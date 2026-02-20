@@ -44,7 +44,9 @@ async def main():
                     # Prioriza playlist.m3u8 se disponível, senão pega a primeira
                     main_url = next((u for u in res["m3u8_urls"] if "playlist.m3u8" in u.lower()), res["m3u8_urls"][0])
                     logo = f' tvg-logo="{res["thumbnail"]}"' if res["thumbnail"] else ""
-                    f.write(f'#EXTINF:-1{logo} group-title="ALLFINDER STREAMS", {res["title"]}\n')
+                    # Usa o título real extraído, se não for o padrão "Stream"
+                    display_title = res["title"] if res["title"] != "Stream" else f"Stream de {res['source_url']}"
+                    f.write(f'#EXTINF:-1{logo} group-title="ALLFINDER STREAMS", {display_title}\n')
                     f.write(f"{main_url}\n")
         print(f"\n[✓] Arquivo '{args.output}' gerado com sucesso com títulos e logos!")
     else:

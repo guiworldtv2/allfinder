@@ -61,6 +61,7 @@ class M3U8Extractor:
             
             print(f"[*] Navegando para: {url}")
             try:
+                # Carrega a página até o DOM estar pronto
                 await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
                 
                 # Lógica de Thumbnail específica para Globo baseada no ID do vídeo
@@ -69,21 +70,20 @@ class M3U8Extractor:
                     if video_id_match:
                         video_id = video_id_match.group(1)
                         self.thumbnail_url = f"https://s04.video.glbimg.com/x720/{video_id}.jpg"
-                        print(f"[*] Thumbnail Globo detectada via ID: {self.thumbnail_url}")
+                        print(f"[*] Thumbnail Globo detectada: {self.thumbnail_url}")
 
-                # Extração de Metadados Dinâmicos
-                # Espera um pouco para o título dinâmico (comum em notícias ao vivo) carregar
-                await asyncio.sleep(5)
+                # Espera curta para garantir que títulos dinâmicos carreguem
+                await asyncio.sleep(3)
                 
+                # Extração de Metadados
                 metadata = await page.evaluate("""() => {
                     const getMeta = (name) => {
                         const el = document.querySelector(`meta[property="${name}"], meta[name="${name}"], meta[property="og:${name}"]`);
                         return el ? el.getAttribute('content') : null;
                     };
                     
-                    // Tenta pegar o título mais específico (h1 de live ou meta og:title)
-                    const h1 = document.querySelector('h1.video-title, h1.LiveVideo__Title, h1.title');
-                    const metaTitle = getMeta('og:title') || getMeta('twitter:title');
+                    const h1 = document.querySelector('h1.video-title, h1.LiveVideo__Title, h1.title, h1.video-info__title');
+                    const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
                     
                     return {
                         title: h1 ? h1.innerText : (metaTitle || document.title),
@@ -101,9 +101,13 @@ class M3U8Extractor:
                     print("[*] Executando interações...")
                     await interaction_func(page)
                 else:
-                    print("[*] Monitorando rede...")
-                    for _ in range(25):
+                    print("[*] Monitorando rede por streams...")
+                    # Espera ativa por até 30 segundos, mas sem fechar imediatamente ao achar
+                    # para dar tempo de outras requisições de metadados se necessário
+                    for _ in range(30):
                         if any("playlist.m3u8" in u.lower() for u in self.found_urls):
+                            # Espera um respiro final
+                            await asyncio.sleep(2)
                             break
                         await asyncio.sleep(1)
             except Exception as e:
