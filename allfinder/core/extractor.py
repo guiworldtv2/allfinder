@@ -25,7 +25,6 @@ class M3U8Extractor:
 
     async def _handle_request(self, request: Request):
         url = request.url
-        # Captura M3U8
         if ".m3u8" in url.lower():
             blacklist = ["youbora", "analytics", "telemetry", "log", "metrics", "heartbeat", "omtrdc", "hotjar", "scorecardresearch"]
             if not any(word in url.lower() for word in blacklist):
@@ -33,13 +32,6 @@ class M3U8Extractor:
                     self.found_urls.append(url)
                     if "playlist.m3u8" in url.lower() or "chunklist.m3u8" in url.lower():
                         print(f"[!] STREAM DETECTADO: {url[:80]}...")
-        
-        # Captura Thumbnail via requisições de rede (fallback)
-        if not self.thumbnail_url and any(ext in url.lower() for ext in [".jpg", ".jpeg", ".png"]):
-            if any(word in url.lower() for word in ["poster", "thumb", "cover", "background", "logo"]):
-                # Evita imagens muito pequenas ou de analytics
-                if "analytics" not in url.lower() and "pixel" not in url.lower():
-                    self.thumbnail_url = url
 
     async def extract(self, url: str, interaction_func: Optional[Callable[[Page], asyncio.Future]] = None) -> Dict[str, Any]:
         ensure_playwright_browsers()
@@ -69,17 +61,32 @@ class M3U8Extractor:
             
             print(f"[*] Navegando para: {url}")
             try:
-                # Carrega a página
                 await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
                 
-                # Extração de Metadados via DOM (Mais confiável para Thumbnails)
+                # Lógica de Thumbnail específica para Globo baseada no ID do vídeo
+                if "globo.com" in url:
+                    video_id_match = re.search(r'/v/(\d+)', url)
+                    if video_id_match:
+                        video_id = video_id_match.group(1)
+                        self.thumbnail_url = f"https://s04.video.glbimg.com/x720/{video_id}.jpg"
+                        print(f"[*] Thumbnail Globo detectada via ID: {self.thumbnail_url}")
+
+                # Extração de Metadados Dinâmicos
+                # Espera um pouco para o título dinâmico (comum em notícias ao vivo) carregar
+                await asyncio.sleep(5)
+                
                 metadata = await page.evaluate("""() => {
                     const getMeta = (name) => {
-                        const el = document.querySelector(`meta[property="${name}"], meta[name="${name}"]`);
+                        const el = document.querySelector(`meta[property="${name}"], meta[name="${name}"], meta[property="og:${name}"]`);
                         return el ? el.getAttribute('content') : null;
                     };
+                    
+                    // Tenta pegar o título mais específico (h1 de live ou meta og:title)
+                    const h1 = document.querySelector('h1.video-title, h1.LiveVideo__Title, h1.title');
+                    const metaTitle = getMeta('og:title') || getMeta('twitter:title');
+                    
                     return {
-                        title: document.title,
+                        title: h1 ? h1.innerText : (metaTitle || document.title),
                         og_image: getMeta('og:image'),
                         twitter_image: getMeta('twitter:image'),
                         poster: document.querySelector('video') ? document.querySelector('video').getAttribute('poster') : null
@@ -87,8 +94,8 @@ class M3U8Extractor:
                 }""")
                 
                 page_title = metadata.get('title') or page_title
-                # Prioridade para metadados HTML
-                self.thumbnail_url = metadata.get('og_image') or metadata.get('twitter_image') or metadata.get('poster') or self.thumbnail_url
+                if not self.thumbnail_url:
+                    self.thumbnail_url = metadata.get('og_image') or metadata.get('twitter_image') or metadata.get('poster')
 
                 if interaction_func:
                     print("[*] Executando interações...")
@@ -106,7 +113,7 @@ class M3U8Extractor:
                 await browser.close()
         
         return {
-            "title": page_title,
+            "title": page_title.strip(),
             "m3u8_urls": self.found_urls,
             "thumbnail": self.thumbnail_url
         }
