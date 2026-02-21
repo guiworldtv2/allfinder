@@ -1,4 +1,5 @@
 import pytest
+import json
 from allfinder.core.extractor import M3U8Extractor
 
 def test_validate_url_valid():
@@ -26,3 +27,24 @@ def test_extractor_initialization():
     assert extractor.cookies_from_browser == "chrome"
     assert extractor.found_urls == []
     assert extractor.page_title == "Stream"
+
+def test_parse_cookies_json(tmp_path):
+    d = tmp_path / "cookies.json"
+    cookies_data = [{"name": "test", "value": "val", "domain": "example.com", "path": "/"}]
+    d.write_text(json.dumps(cookies_data))
+    
+    extractor = M3U8Extractor(cookies_file=str(d))
+    parsed = extractor._parse_cookies_file()
+    assert len(parsed) == 1
+    assert parsed[0]['name'] == "test"
+
+def test_parse_cookies_txt(tmp_path):
+    d = tmp_path / "cookies.txt"
+    # Formato Netscape: domain, flag, path, secure, expiration, name, value
+    d.write_text("example.com\tTRUE\t/\tFALSE\t1700000000\tname\tvalue\n")
+    
+    extractor = M3U8Extractor(cookies_file=str(d))
+    parsed = extractor._parse_cookies_file()
+    assert len(parsed) == 1
+    assert parsed[0]['name'] == "name"
+    assert parsed[0]['value'] == "value"

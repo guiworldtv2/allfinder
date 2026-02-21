@@ -1,6 +1,8 @@
 import asyncio
 import re
 import sys
+import json
+import os
 import subprocess
 import validators
 from typing import Optional, List, Callable, Dict, Any
@@ -18,10 +20,11 @@ def ensure_playwright_browsers():
         subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"], check=True)
 
 class M3U8Extractor:
-    def __init__(self, headless: bool = True, timeout: int = 30000, cookies_from_browser: Optional[str] = None):
+    def __init__(self, headless: bool = True, timeout: int = 30000, cookies_from_browser: Optional[str] = None, cookies_file: Optional[str] = None):
         self.headless = headless
         self.timeout = timeout
         self.cookies_from_browser = cookies_from_browser
+        self.cookies_file = cookies_file
         self.found_urls: List[str] = []
         self.thumbnail_url: Optional[str] = None
         self.page_title: str = "Stream"
@@ -31,11 +34,9 @@ class M3U8Extractor:
         if not validators.url(url):
             return False
         
-        # Aceita apenas http e https
         if not url.lower().startswith(('http://', 'https://')):
             return False
 
-        # Prevenção básica de SSRF: Bloqueia localhost e IPs privados
         parsed_url = re.search(r'https?://([^/]+)', url)
         if parsed_url:
             host = parsed_url.group(1).lower()
@@ -43,10 +44,46 @@ class M3U8Extractor:
                 return False
         return True
 
+    def _parse_cookies_file(self) -> List[Dict[str, Any]]:
+        """Lê cookies de arquivos .json ou .txt (formato Netscape)."""
+        if not self.cookies_file or not os.path.exists(self.cookies_file):
+            return []
+
+        cookies = []
+        try:
+            if self.cookies_file.endswith('.json'):
+                with open(self.cookies_file, 'r') as f:
+                    data = json.load(f)
+                    # Suporta tanto lista de cookies quanto formato exportado por algumas extensões
+                    if isinstance(data, list):
+                        cookies = data
+                    elif isinstance(data, dict) and 'cookies' in data:
+                        cookies = data['cookies']
+            else:
+                # Formato Netscape (.txt)
+                with open(self.cookies_file, 'r') as f:
+                    for line in f:
+                        if line.startswith('#') or not line.strip():
+                            continue
+                        parts = line.strip().split('\t')
+                        if len(parts) >= 7:
+                            cookies.append({
+                                'name': parts[5],
+                                'value': parts[6],
+                                'domain': parts[0],
+                                'path': parts[2],
+                                'expires': int(parts[4]) if parts[4].isdigit() else -1,
+                                'httpOnly': parts[1].upper() == 'TRUE',
+                                'secure': parts[3].upper() == 'TRUE'
+                            })
+        except Exception as e:
+            print(f"[!] Erro ao ler arquivo de cookies: {e}")
+        
+        return cookies
+
     async def _handle_request(self, request: Request):
         url = request.url
         if ".m3u8" in url.lower():
-            # Lista negra estendida para ignorar propagandas e telemetria
             blacklist = [
                 "youbora", "chartbeat.net", "facebook.com", "horizon.globo.com", "analytics", "telemetry", "log", "metrics", "heartbeat", 
                 "omtrdc", "hotjar", "scorecardresearch", "doubleclick", "ads", 
@@ -56,17 +93,13 @@ class M3U8Extractor:
             
             if not any(word in url.lower() for word in blacklist):
                 if url not in self.found_urls:
-                    # Prioriza links que parecem ser o conteúdo real (master, index, playlists longas)
                     is_likely_main = any(word in url.lower() for word in ["master", "index", "playlist", "chunklist"])
-                    
                     if is_likely_main:
-                        # Coloca no início da lista se for provável que seja o principal
                         self.found_urls.insert(0, url)
                     else:
                         self.found_urls.append(url)
 
     async def _update_metadata(self, page: Page):
-        """Tenta capturar o melhor título e thumbnail disponíveis no momento."""
         try:
             metadata = await page.evaluate("""() => {
                 const getMeta = (name) => {
@@ -74,16 +107,7 @@ class M3U8Extractor:
                     return el ? el.getAttribute('content') : null;
                 };
                 
-                const titleSelectors = [
-                    'h1.video-title', 
-                    'h1.LiveVideo__Title', 
-                    'h1.video-info__title', 
-                    '.VideoInfo__Title', 
-                    '.video-title-container h1',
-                    '.headline',
-                    'h1'
-                ];
-                
+                const titleSelectors = ['h1.video-title', 'h1.LiveVideo__Title', 'h1.video-info__title', '.VideoInfo__Title', '.video-title-container h1', '.headline', 'h1'];
                 let foundTitle = null;
                 for (const sel of titleSelectors) {
                     const el = document.querySelector(sel);
@@ -92,9 +116,7 @@ class M3U8Extractor:
                         break;
                     }
                 }
-
                 const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
-                
                 return {
                     title: foundTitle || metaTitle || document.title,
                     og_image: getMeta('og:image'),
@@ -126,31 +148,27 @@ class M3U8Extractor:
         self.page_title = "Stream"
         
         async with async_playwright() as p:
-            launch_kwargs = {
-                "headless": self.headless,
-                "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
-            }
-            
-            browser: Browser = await p.chromium.launch(**launch_kwargs)
+            browser: Browser = await p.chromium.launch(
+                headless=self.headless,
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            )
 
             context_kwargs = {
                 "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
             }
             
-            # Implementação de cookies de navegadores externos
-            if self.cookies_from_browser:
-                # Nota: Playwright não suporta diretamente 'cookies_from_browser' no launch
-                # Esta é uma implementação simulada ou que exigiria ferramentas extras como 'browser-cookie3'
-                # Para manter nativo, sugerimos que o usuário passe o caminho do perfil se necessário
-                # Mas para atender o pedido CLI, vamos registrar a intenção.
-                pass
-
             context = await browser.new_context(**context_kwargs)
+            
+            # Carrega cookies do arquivo se fornecido
+            file_cookies = self._parse_cookies_file()
+            if file_cookies:
+                await context.add_cookies(file_cookies)
+                print(f"[*] {len(file_cookies)} cookies carregados do arquivo.")
+
             page: Page = await context.new_page()
             page.on("request", self._handle_request)
             
             try:
-                # Tratamento de Redirecionamentos: Playwright já segue redirecionamentos por padrão no goto
                 await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
                 
                 if "globo.com" in url:
@@ -161,13 +179,11 @@ class M3U8Extractor:
                 if interaction_func:
                     await interaction_func(page)
                 
-                # Otimização de Esperas: Loop com verificação de condição
                 for i in range(45):
                     await self._update_metadata(page)
                     has_main_stream = any(word in u.lower() for u in self.found_urls for word in ["master", "index"])
-                    
                     if has_main_stream and self.page_title != "Stream":
-                        if i > 5: # Reduzido de 10 para 5 para ser mais rápido
+                        if i > 5:
                             break
                     await asyncio.sleep(1)
             except Exception as e:

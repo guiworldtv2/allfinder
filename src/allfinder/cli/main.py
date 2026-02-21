@@ -40,10 +40,11 @@ async def main():
     parser.add_argument("--timeout", type=int, default=60000, help="Tempo limite em milissegundos.")
     parser.add_argument("--output", "-o", help="Caminho para salvar o arquivo .m3u resultante.")
     parser.add_argument("--cookies-from-browser", choices=["chrome", "edge"], help="Importa cookies do navegador especificado.")
+    parser.add_argument("--cookies", help="Caminho para um arquivo de cookies (.txt ou .json).")
 
     args = parser.parse_args()
 
-    extractor = M3U8Extractor(headless=args.headless, timeout=args.timeout, cookies_from_browser=args.cookies_from_browser)
+    extractor = M3U8Extractor(headless=args.headless, timeout=args.timeout, cookies_from_browser=args.cookies_from_browser, cookies_file=args.cookies)
     plugin_manager = PluginManager()
     plugin_manager.register_plugin(GenericPlugin())
 
