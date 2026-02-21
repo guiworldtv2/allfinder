@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "allfinder"
-version = "0.1.1"
+version = "0.2.0"
 description = "Uma ferramenta para extrair URLs .m3u8 de sites de streaming via automação de navegador."
 readme = "README.md"
 requires-python = ">=3.8"
