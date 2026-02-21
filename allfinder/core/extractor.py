@@ -27,12 +27,26 @@ class M3U8Extractor:
     async def _handle_request(self, request: Request):
         url = request.url
         if ".m3u8" in url.lower():
-            blacklist = ["youbora", "analytics", "telemetry", "log", "metrics", "heartbeat", "omtrdc", "hotjar", "scorecardresearch"]
+            # Lista negra estendida para ignorar propagandas e telemetria
+            blacklist = [
+                "youbora", "analytics", "telemetry", "log", "metrics", "heartbeat", 
+                "omtrdc", "hotjar", "scorecardresearch", "doubleclick", "ads", 
+                "adnxs", "fwmrm.net", "googleads", "amazon-adsystem", "casalemedia",
+                "adnxs", "advertising", "segment", "moatads", "krxd"
+            ]
+            
             if not any(word in url.lower() for word in blacklist):
                 if url not in self.found_urls:
-                    self.found_urls.append(url)
-                    if "playlist.m3u8" in url.lower() or "chunklist.m3u8" in url.lower():
-                        print(f"[!] STREAM DETECTADO: {url[:80]}...")
+                    # Prioriza links que parecem ser o conteúdo real (master, index, playlists longas)
+                    is_likely_main = any(word in url.lower() for word in ["master", "index", "playlist", "chunklist"])
+                    
+                    if is_likely_main:
+                        # Coloca no início da lista se for provável que seja o principal
+                        self.found_urls.insert(0, url)
+                        print(f"[!] STREAM PRINCIPAL DETECTADO: {url[:80]}...")
+                    else:
+                        self.found_urls.append(url)
+                        print(f"[+] M3U8 encontrado: {url[:80]}...")
 
     async def _update_metadata(self, page: Page):
         """Tenta capturar o melhor título e thumbnail disponíveis no momento."""
@@ -50,6 +64,7 @@ class M3U8Extractor:
                     'h1.video-info__title', 
                     '.VideoInfo__Title', 
                     '.video-title-container h1',
+                    '.headline',
                     'h1'
                 ];
                 
@@ -73,9 +88,11 @@ class M3U8Extractor:
             }""")
             
             if metadata.get('title') and len(metadata['title']) > 5:
-                self.page_title = metadata['title']
+                # Remove sufixos comuns de sites (ex: " - Fox News")
+                clean_title = re.sub(r'\s*\|\s*.*$', '', metadata['title'])
+                clean_title = re.sub(r'\s*-\s*(Fox News|ABC News|Globoplay|NBC News).*$', '', clean_title, flags=re.IGNORECASE)
+                self.page_title = clean_title.strip()
             
-            # Só atualiza thumbnail se não tiver uma melhor (como a da Globo via ID)
             if not self.thumbnail_url or "glbimg.com" not in self.thumbnail_url:
                 new_thumb = metadata.get('og_image') or metadata.get('twitter_image') or metadata.get('poster')
                 if new_thumb:
@@ -124,12 +141,16 @@ class M3U8Extractor:
                     await interaction_func(page)
                 
                 # Monitoramento Contínuo: Metadados + Rede
-                print("[*] Extraindo metadados e monitorando rede...")
-                for i in range(30):
+                print("[*] Extraindo metadados e monitorando rede (aguardando stream real)...")
+                for i in range(45): # Aumentado para 45s para passar por propagandas longas
                     await self._update_metadata(page)
-                    # Se já achamos o link principal e um título decente, podemos parar
-                    if any("playlist.m3u8" in u.lower() for u in self.found_urls) and self.page_title != "Stream":
-                        if i > 5: # Garante pelo menos 5s para o título estabilizar
+                    
+                    # Verifica se temos um link que parece ser o principal (master/index)
+                    has_main_stream = any(word in u.lower() for u in self.found_urls for word in ["master", "index"])
+                    
+                    if has_main_stream and self.page_title != "Stream":
+                        if i > 10: # Garante pelo menos 10s para estabilizar e pular ads iniciais
+                            print("[*] Stream principal e metadados capturados!")
                             break
                     await asyncio.sleep(1)
             except Exception as e:
