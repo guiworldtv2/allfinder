@@ -14,11 +14,21 @@ Uma ferramenta em Python para extrair URLs `.m3u8` e `.mpd` de sites de streamin
 
 ## Instalação
 
+### Sem Git (recomendado para Windows)
+
+Não precisa ter o Git instalado. Basta rodar no terminal:
+
+```bash
+pip install https://github.com/guiworldtv2/allfinder/releases/download/v0.2.0/allfinder-0.2.0-py3-none-any.whl
+```
+
+### Com Git instalado
+
 ```bash
 pip install git+https://github.com/guiworldtv2/allfinder.git
 ```
 
-Ou para desenvolvimento local:
+### Para desenvolvimento local
 
 ```bash
 git clone https://github.com/guiworldtv2/allfinder.git
@@ -49,17 +59,17 @@ allfinder https://exemplo.com/live --browser firefox
 
 ### Reutilizar sessão logada (perfil existente)
 
-Esta é a funcionalidade mais poderosa para sites que exigem assinatura. O navegador deve estar previamente logado no perfil especificado.
+Esta é a funcionalidade mais poderosa para sites que exigem assinatura. O navegador deve estar previamente logado no perfil especificado. **Feche o navegador antes de rodar o comando.**
 
 ```bash
 # Usar o perfil padrão do Edge (já logado no Globoplay, por exemplo)
-allfinder https://globoplay.globo.com/v/12345/ --browser edge --use-profile
+allfinder https://globoplay.globo.com/v/7832875/ --browser edge --use-profile --no-headless
 
 # Especificar o nome do perfil
-allfinder https://globoplay.globo.com/v/12345/ --browser edge --use-profile --profile "Pessoa 1"
+allfinder https://globoplay.globo.com/v/7832875/ --browser edge --use-profile --profile "Pessoa 1" --no-headless
 
-# Com Chrome, sem modo headless (recomendado para perfis)
-allfinder https://exemplo.com/live --browser chrome --use-profile --no-headless
+# Salvar resultado em arquivo .m3u
+allfinder https://globoplay.globo.com/v/7832875/ --browser edge --use-profile --profile "Pessoa 1" --no-headless -o globo.m3u
 ```
 
 ### Listar perfis disponíveis
@@ -72,16 +82,15 @@ Saída de exemplo:
 ```
 === Navegadores e Perfis Detectados ===
 
-[CHROME] /usr/bin/google-chrome
+[CHROME] C:\Program Files\Google\Chrome\Application\chrome.exe
   - Perfil: 'Default' | Dir: Default
-  - Perfil: 'Perfil 1' | Dir: Profile 1
 
 [EDGE] C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
   - Perfil: 'Default' | Dir: Default
   - Perfil: 'Pessoa 1' | Dir: Profile 1
 
-[FIREFOX] /usr/bin/firefox
-  - Perfil: 'default-release' | Dir: /home/user/.mozilla/firefox/abc.default-release
+[FIREFOX] C:\Program Files\Mozilla Firefox\firefox.exe
+  - Perfil: 'default-release' | Dir: ...
 
 [CHROMIUM] NÃO ENCONTRADO
 ```
