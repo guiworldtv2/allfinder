@@ -46,7 +46,16 @@ from allfinder.core.network_capture import NetworkCapture
 # ---------------------------------------------------------------------------
 
 def ensure_playwright_browsers():
-    """Garante que os navegadores e dependências do sistema do Playwright estejam instalados."""
+    """Garante que os navegadores do Playwright estejam instalados.
+
+    Compatível com Windows, Linux e macOS. No Windows, não tenta usar
+    'sudo' nem 'apt-get', pois esses comandos não existem.
+    """
+    is_windows = sys.platform.startswith("win")
+    is_colab = "google.colab" in sys.modules
+    env = os.environ.copy()
+
+    # Verifica se o Chromium já está instalado
     try:
         result = subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium", "--dry-run"],
@@ -57,40 +66,51 @@ def ensure_playwright_browsers():
     except Exception:
         pass
 
-    print("[*] Instalando navegadores e dependências do sistema (isso pode levar alguns minutos)...")
+    print("[*] Instalando o Chromium do Playwright (isso pode levar alguns minutos)...")
 
-    is_colab = "google.colab" in sys.modules
-    has_sudo = subprocess.run(["which", "sudo"], capture_output=True).returncode == 0
-    env = os.environ.copy()
-    env["DEBIAN_FRONTEND"] = "noninteractive"
-    cmd_prefix = ["sudo", "-E"] if (is_colab or has_sudo) else []
-
-    try:
-        print("[*] Baixando Chromium...")
-        subprocess.run(
-            cmd_prefix + [sys.executable, "-m", "playwright", "install", "chromium"],
-            check=True, env=env,
-        )
-        print("[*] Instalando dependências do sistema (apt-get)...")
-        if is_colab or has_sudo:
-            subprocess.run(
-                ["sudo", "-E", "apt-get", "update", "-y"],
-                check=True, env=env, capture_output=True,
-            )
-        subprocess.run(
-            cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"],
-            check=True, env=env,
-        )
-        print("[✓] Navegador e dependências instalados com sucesso!")
-    except subprocess.CalledProcessError as e:
-        print(f"[!] Erro durante a instalação: {e}")
+    if is_windows:
+        # No Windows não existe sudo nem apt-get
         try:
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                check=True, env=env,
+            )
+            print("[✓] Chromium instalado com sucesso!")
+        except subprocess.CalledProcessError as e:
+            print(f"[!] Erro ao instalar o Chromium: {e}")
+            print("[!] Tente manualmente: python -m playwright install chromium")
+    else:
+        # Linux / macOS — tenta usar sudo se disponível
+        has_sudo = subprocess.run(
+            ["which", "sudo"], capture_output=True
+        ).returncode == 0
+        env["DEBIAN_FRONTEND"] = "noninteractive"
+        cmd_prefix = ["sudo", "-E"] if (is_colab or has_sudo) else []
+
+        try:
+            subprocess.run(
+                cmd_prefix + [sys.executable, "-m", "playwright", "install", "chromium"],
+                check=True, env=env,
+            )
+            if is_colab or has_sudo:
+                subprocess.run(
+                    ["sudo", "-E", "apt-get", "update", "-y"],
+                    check=True, env=env, capture_output=True,
+                )
             subprocess.run(
                 cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"],
                 check=True, env=env,
             )
-        except Exception:
-            print("[!] Falha ao instalar dependências. O navegador pode não funcionar corretamente.")
+            print("[✓] Navegador e dependências instalados com sucesso!")
+        except subprocess.CalledProcessError as e:
+            print(f"[!] Erro durante a instalação: {e}")
+            try:
+                subprocess.run(
+                    cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"],
+                    check=True, env=env,
+                )
+            except Exception:
+                print("[!] Falha ao instalar dependências. O navegador pode não funcionar corretamente.")
 
 
 # ---------------------------------------------------------------------------
