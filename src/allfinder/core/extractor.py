@@ -77,7 +77,7 @@ class M3U8Extractor:
         return True
 
     def _parse_cookies_file(self) -> List[Dict[str, Any]]:
-        """Lê cookies de arquivos .json ou .txt (formato Netscape)."""
+        """Lê cookies de arquivos .json ou .txt (formato Netscape) e limpa campos inválidos."""
         if not self.cookies_file or not os.path.exists(self.cookies_file):
             return []
 
@@ -86,7 +86,6 @@ class M3U8Extractor:
             if self.cookies_file.endswith('.json'):
                 with open(self.cookies_file, 'r') as f:
                     data = json.load(f)
-                    # Suporta tanto lista de cookies quanto formato exportado por algumas extensões
                     if isinstance(data, list):
                         cookies = data
                     elif isinstance(data, dict) and 'cookies' in data:
@@ -108,10 +107,32 @@ class M3U8Extractor:
                                 'httpOnly': parts[1].upper() == 'TRUE',
                                 'secure': parts[3].upper() == 'TRUE'
                             })
+            
+            # Limpeza de cookies para evitar erros no Playwright (ex: sameSite inválido)
+            cleaned_cookies = []
+            valid_samesite = ["Strict", "Lax", "None"]
+            
+            for cookie in cookies:
+                # Remove campos que podem causar erro se estiverem vazios ou inválidos
+                if 'sameSite' in cookie:
+                    if cookie['sameSite'] not in valid_samesite:
+                        # Se o valor for inválido (ex: vazio ou string aleatória), removemos o campo
+                        # O Playwright usará o valor padrão do navegador
+                        del cookie['sameSite']
+                
+                # Garante que campos booleanos sejam booleanos
+                for bool_field in ['httpOnly', 'secure', 'session']:
+                    if bool_field in cookie:
+                        cookie[bool_field] = str(cookie[bool_field]).lower() == 'true'
+                
+                cleaned_cookies.append(cookie)
+            
+            return cleaned_cookies
+
         except Exception as e:
-            print(f"[!] Erro ao ler arquivo de cookies: {e}")
+            print(f"[!] Erro ao ler/limpar arquivo de cookies: {e}")
         
-        return cookies
+        return []
 
     def _clean_url(self, url: str) -> str:
         """Extrai a URL real se estiver embutida em parâmetros de rastreamento (ex: Google Analytics)."""
