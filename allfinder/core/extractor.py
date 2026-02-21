@@ -29,7 +29,7 @@ class M3U8Extractor:
         if ".m3u8" in url.lower():
             # Lista negra estendida para ignorar propagandas e telemetria
             blacklist = [
-                "youbora", "analytics", "telemetry", "log", "metrics", "heartbeat", 
+                "youbora", "chartbeat.net", "facebook.com", "horizon.globo.com", "analytics", "telemetry", "log", "metrics", "heartbeat", 
                 "omtrdc", "hotjar", "scorecardresearch", "doubleclick", "ads", 
                 "adnxs", "fwmrm.net", "googleads", "amazon-adsystem", "casalemedia",
                 "adnxs", "advertising", "segment", "moatads", "krxd"
