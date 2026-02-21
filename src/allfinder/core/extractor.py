@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import validators
+import urllib.parse
 from typing import Optional, List, Callable, Dict, Any
 from playwright.async_api import async_playwright, Request, Page, Browser
 
@@ -112,9 +113,31 @@ class M3U8Extractor:
         
         return cookies
 
+    def _clean_url(self, url: str) -> str:
+        """Extrai a URL real se estiver embutida em parâmetros de rastreamento (ex: Google Analytics)."""
+        try:
+            parsed = urllib.parse.urlparse(url)
+            params = urllib.parse.parse_qs(parsed.query)
+            
+            # Lista de parâmetros comuns que podem conter a URL real
+            url_params = ['ep.URL', 'url', 'link', 'target', 'redir']
+            
+            for param in url_params:
+                if param in params:
+                    potential_url = params[param][0]
+                    if ".m3u8" in potential_url.lower() and self.validate_url(potential_url):
+                        return potential_url
+        except:
+            pass
+        return url
+
     async def _handle_request(self, request: Request):
         url = request.url
-        if ".m3u8" in url.lower():
+        
+        # Tenta limpar a URL antes de verificar se é m3u8
+        cleaned_url = self._clean_url(url)
+        
+        if ".m3u8" in cleaned_url.lower():
             blacklist = [
                 "youbora", "chartbeat.net", "facebook.com", "horizon.globo.com", "analytics", "telemetry", "log", "metrics", "heartbeat", 
                 "omtrdc", "hotjar", "scorecardresearch", "doubleclick", "ads", 
@@ -122,13 +145,14 @@ class M3U8Extractor:
                 "adnxs", "advertising", "segment", "moatads", "krxd"
             ]
             
-            if not any(word in url.lower() for word in blacklist):
-                if url not in self.found_urls:
-                    is_likely_main = any(word in url.lower() for word in ["master", "index", "playlist", "chunklist"])
+            # Se a URL limpa ainda contém palavras da blacklist, ignoramos
+            if not any(word in cleaned_url.lower() for word in blacklist):
+                if cleaned_url not in self.found_urls:
+                    is_likely_main = any(word in cleaned_url.lower() for word in ["master", "index", "playlist", "chunklist"])
                     if is_likely_main:
-                        self.found_urls.insert(0, url)
+                        self.found_urls.insert(0, cleaned_url)
                     else:
-                        self.found_urls.append(url)
+                        self.found_urls.append(cleaned_url)
 
     async def _update_metadata(self, page: Page):
         try:
