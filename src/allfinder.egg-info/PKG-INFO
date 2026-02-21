@@ -1,0 +1,64 @@
+Metadata-Version: 2.4
+Name: allfinder
+Version: 0.1.1
+Summary: Uma ferramenta para extrair URLs .m3u8 de sites de streaming via automação de navegador.
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: playwright>=1.41.0
+Requires-Dist: rich>=13.0.0
+Requires-Dist: validators>=0.22.0
+
+# allfinder
+
+Uma ferramenta em Python para extrair URLs `.m3u8` de sites de streaming, utilizando automação de navegador (Playwright) para simular a interação do usuário e interceptar requisições de rede.
+
+## Funcionalidades
+
+*   **Extração de M3U8:** Captura URLs `.m3u8` que são carregadas dinamicamente após a interação com a página.
+*   **Automação de Navegador:** Utiliza Playwright para abrir uma instância de navegador, navegar até a URL fornecida e interagir com a página (ex: clicar no botão de play).
+*   **Auto-Instalação:** O navegador necessário é instalado automaticamente na primeira execução.
+*   **Sistema de Plugins:** Permite a criação de plugins específicos para diferentes sites.
+*   **Modo Headless:** Suporte para execução em modo headless (sem interface gráfica) para ambientes de servidor.
+
+## Instalação
+
+Para instalar a ferramenta globalmente e usá-la em qualquer lugar do seu terminal:
+
+1.  **Instale diretamente do GitHub:**
+
+    ```bash
+    pip install git+https://github.com/guiworldtv2/allfinder.git
+    ```
+
+Ou, se preferir instalar localmente para desenvolvimento:
+
+1.  **Clone e instale em modo editável:**
+
+    ```bash
+    git clone https://github.com/guiworldtv2/allfinder.git
+    cd allfinder
+    pip install -e .
+    ```
+
+## Uso
+
+Após a instalação, o comando `allfinder` estará disponível no seu terminal:
+
+```bash
+allfinder <URL_DO_SITE>
+```
+
+**Exemplo:**
+
+```bash
+allfinder https://exemplo.com/video-com-streaming
+```
+
+### Opções
+
+*   `--headless`: Executa o navegador em modo headless (padrão). Para ver a interface gráfica, use `--no-headless`.
+*   `--timeout <milissegundos>`: Define o tempo limite para operações do navegador (padrão: 30000ms).
+
+## Licença
+
+Este projeto está licenciado sob a licença MIT.

@@ -4,19 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "allfinder"
-version = "0.1.0"
+version = "0.1.1"
 description = "Uma ferramenta para extrair URLs .m3u8 de sites de streaming via automação de navegador."
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "playwright>=1.41.0",
+    "rich>=13.0.0",
+    "validators>=0.22.0",
 ]
 
 [project.scripts]
 allfinder = "allfinder.cli.main:main_entry"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 
 [tool.setuptools.package-dir]
-"" = "."
+"" = "src"

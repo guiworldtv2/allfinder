@@ -42,19 +42,21 @@ class GenericPlugin(BasePlugin):
             '.play-icon'
         ]
         
-        # Tenta clicar no botão de play
+        # Tenta clicar no botão de play usando esperas inteligentes
         for selector in play_selectors:
             try:
-                # Espera curta para ver se o seletor aparece
-                if await page.is_visible(selector):
-                    print(f"[*] Tentando clicar no seletor de play: {selector}")
-                    await page.click(selector)
-                    # Espera um pouco após o clique para o stream iniciar
-                    await asyncio.sleep(5)
-                    break
+                # Espera o seletor ficar visível por no máximo 5 segundos
+                await page.wait_for_selector(selector, state="visible", timeout=5000)
+                await page.click(selector)
+                # Espera o estado da rede ficar ocioso após o clique
+                await page.wait_for_load_state("networkidle", timeout=5000)
+                break
             except:
                 continue
         
-        # Espera adicional para carregamento do stream
-        print("[*] Aguardando o stream estabilizar...")
-        await asyncio.sleep(20)
+        # Em vez de sleep fixo de 20s, esperamos o estado da rede ou um tempo menor
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except:
+            # Se o networkidle falhar (muitos ads), apenas continua
+            pass
