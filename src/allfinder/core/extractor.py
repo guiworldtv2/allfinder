@@ -192,9 +192,45 @@ class M3U8Extractor:
         except:
             pass
 
+    def _extract_with_ytdlp(self, url: str) -> Optional[str]:
+        """Tenta extrair o link m3u8 usando yt-dlp (útil para YouTube e outros sites complexos)."""
+        try:
+            # Verifica se yt-dlp está instalado
+            subprocess.run(["yt-dlp", "--version"], capture_output=True, check=True)
+            
+            cmd = ["yt-dlp", "-g", "-f", "best", url]
+            if self.cookies_file:
+                cmd.extend(["--cookies", self.cookies_file])
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                potential_url = result.stdout.strip()
+                if ".m3u8" in potential_url.lower() or "manifest" in potential_url.lower():
+                    return potential_url
+        except:
+            pass
+        return None
+
     async def extract(self, url: str, interaction_func: Optional[Callable[[Page], asyncio.Future]] = None) -> Dict[str, Any]:
         if not self.validate_url(url):
             raise ValueError(f"URL inválida ou insegura: {url}")
+
+        # Tenta yt-dlp primeiro para sites conhecidos como YouTube
+        if "youtube.com" in url.lower() or "youtu.be" in url.lower():
+            ytdl_url = self._extract_with_ytdlp(url)
+            if ytdl_url:
+                # Tenta pegar o título via yt-dlp também
+                title = "YouTube Live"
+                try:
+                    res = subprocess.run(["yt-dlp", "--get-title", url], capture_output=True, text=True)
+                    if res.returncode == 0: title = res.stdout.strip()
+                except: pass
+                
+                return {
+                    "title": title,
+                    "m3u8_urls": [ytdl_url],
+                    "thumbnail": f"https://img.youtube.com/vi/{url.split('v=')[-1] if 'v=' in url else 'live'}/maxresdefault.jpg"
+                }
 
         ensure_playwright_browsers()
         
