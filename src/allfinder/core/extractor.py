@@ -23,23 +23,32 @@ def ensure_playwright_browsers():
     # Detecta se estamos no Colab ou se temos sudo disponível
     is_colab = 'google.colab' in sys.modules
     has_sudo = subprocess.run(['which', 'sudo'], capture_output=True).returncode == 0
-    cmd_prefix = ['sudo'] if (is_colab or has_sudo) else []
+    
+    # Configura variáveis de ambiente para instalação não interativa
+    env = os.environ.copy()
+    env["DEBIAN_FRONTEND"] = "noninteractive"
+    
+    cmd_prefix = ['sudo', '-E'] if (is_colab or has_sudo) else []
 
     try:
-        # Tenta instalar o navegador e as dependências
-        subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-        subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"], check=True)
+        # Tenta instalar o navegador e as dependências de forma silenciosa
+        print("[*] Baixando Chromium...")
+        subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install", "chromium"], check=True, env=env)
+        
+        print("[*] Instalando dependências do sistema (apt-get)...")
+        # No Colab, o apt-get update ajuda a evitar erros de pacotes não encontrados
+        if is_colab or has_sudo:
+            subprocess.run(['sudo', '-E', 'apt-get', 'update', '-y'], check=True, env=env, capture_output=True)
+            
+        subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"], check=True, env=env)
         print("[✓] Navegador e dependências instalados com sucesso!")
     except subprocess.CalledProcessError as e:
-        print(f"[!] Erro ao instalar dependências: {e}")
-        print("[*] Tentando instalação alternativa de dependências...")
+        print(f"[!] Erro durante a instalação: {e}")
+        print("[*] Tentando uma última abordagem forçada...")
         try:
-            # No Colab, às vezes o apt-get update é necessário antes do install-deps
-            if is_colab or has_sudo:
-                subprocess.run(['sudo', 'apt-get', 'update'], check=True)
-            subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"], check=True)
+            subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"], check=True, env=env)
         except:
-            print("[!] Falha crítica ao instalar dependências do sistema. O navegador pode não funcionar.")
+            print("[!] Falha ao instalar dependências. O navegador pode não funcionar corretamente.")
 
 class M3U8Extractor:
     def __init__(self, headless: bool = True, timeout: int = 30000, cookies_from_browser: Optional[str] = None, cookies_file: Optional[str] = None):
