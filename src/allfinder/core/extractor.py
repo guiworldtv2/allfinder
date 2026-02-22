@@ -15,6 +15,7 @@ Melhorias em relação à versão anterior:
 """
 
 import asyncio
+import concurrent.futures
 import json
 import os
 import re
@@ -22,15 +23,6 @@ import subprocess
 import sys
 import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
-
-# ---------------------------------------------------------------------------
-# Correção do event loop no Windows
-# ---------------------------------------------------------------------------
-# O Windows usa ProactorEventLoop por padrão (Python 3.8+), mas o Playwright
-# requer o SelectorEventLoop para criar subprocessos assíncronos corretamente.
-# Esta correção deve ser aplicada antes de qualquer uso do asyncio no Windows.
-if sys.platform.startswith("win"):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import validators
 from playwright.async_api import (
@@ -462,6 +454,11 @@ class M3U8Extractor:
         """
         Extrai URLs de mídia de uma página web.
 
+        No Windows, o Playwright requer o SelectorEventLoop, mas o Jupyter
+        e o Python 3.8+ usam ProactorEventLoop por padrão. Para contornar
+        isso, a extração é executada em uma thread separada com seu próprio
+        SelectorEventLoop quando rodando no Windows.
+
         Parâmetros
         ----------
         url : str
@@ -475,6 +472,27 @@ class M3U8Extractor:
         """
         if not self.validate_url(url):
             raise ValueError(f"URL inválida ou insegura: {url}")
+
+        # No Windows, roda em thread separada com SelectorEventLoop para
+        # contornar a incompatibilidade do ProactorEventLoop com o Playwright.
+        if sys.platform.startswith("win"):
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                result = await loop.run_in_executor(
+                    pool,
+                    lambda: _run_in_selector_loop(self._extract_core, url, interaction_func),
+                )
+            return result
+
+        # Delega para _extract_core (reutilizado pelo path Windows acima)
+        return await self._extract_core(url, interaction_func)
+
+    async def _extract_core(
+        self,
+        url: str,
+        interaction_func: Optional[Callable[[Page], asyncio.Future]] = None,
+    ) -> Dict[str, Any]:
+        """Núcleo da extração — roda dentro do event loop correto."""
 
         # Tenta yt-dlp primeiro para YouTube
         if "youtube.com" in url.lower() or "youtu.be" in url.lower():
@@ -569,3 +587,38 @@ class M3U8Extractor:
             "m3u8_urls": self.found_urls,
             "thumbnail": self.thumbnail_url,
         }
+
+
+# ---------------------------------------------------------------------------
+# Função auxiliar para execução em SelectorEventLoop (Windows)
+# ---------------------------------------------------------------------------
+
+def _run_in_selector_loop(coro_func, *args, **kwargs):
+    """
+    Executa uma coroutine em um novo SelectorEventLoop.
+
+    Usada no Windows para contornar a incompatibilidade entre o
+    ProactorEventLoop (padrão do Windows/Jupyter) e o Playwright,
+    que requer o SelectorEventLoop para criar subprocessos assíncronos.
+
+    Esta função é chamada dentro de uma thread separada via ThreadPoolExecutor,
+    garantindo que o loop principal do Jupyter não seja afetado.
+
+    Parâmetros
+    ----------
+    coro_func : coroutine function
+        Função assíncrona a ser executada (ex: extractor._extract_core).
+    *args, **kwargs
+        Argumentos passados para coro_func.
+
+    Retorna
+    -------
+    O resultado da coroutine.
+    """
+    # Cria um SelectorEventLoop explícito nesta thread
+    loop = asyncio.SelectorEventLoop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro_func(*args, **kwargs))
+    finally:
+        loop.close()
