@@ -473,6 +473,10 @@ class M3U8Extractor:
         if not self.validate_url(url):
             raise ValueError(f"URL inválida ou insegura: {url}")
 
+        # Garante que o Chromium está instalado ANTES de entrar na thread
+        # (subprocess síncrono, não depende do event loop)
+        ensure_playwright_browsers()
+
         # No Windows, roda em thread separada com SelectorEventLoop para
         # contornar a incompatibilidade do ProactorEventLoop com o Playwright.
         if sys.platform.startswith("win"):
@@ -492,7 +496,10 @@ class M3U8Extractor:
         url: str,
         interaction_func: Optional[Callable[[Page], asyncio.Future]] = None,
     ) -> Dict[str, Any]:
-        """Núcleo da extração — roda dentro do event loop correto."""
+        """Núcleo da extração — roda dentro do event loop correto.
+
+        Nota: ensure_playwright_browsers() já foi chamado antes de chegar aqui.
+        """
 
         # Tenta yt-dlp primeiro para YouTube
         if "youtube.com" in url.lower() or "youtu.be" in url.lower():
@@ -513,8 +520,6 @@ class M3U8Extractor:
                     "m3u8_urls": [ytdl_url],
                     "thumbnail": f"https://img.youtube.com/vi/{vid_id}/maxresdefault.jpg",
                 }
-
-        ensure_playwright_browsers()
 
         # Reinicia o estado
         self._capture.reset()
