@@ -23,6 +23,15 @@ import sys
 import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
 
+# ---------------------------------------------------------------------------
+# Correção do event loop no Windows
+# ---------------------------------------------------------------------------
+# O Windows usa ProactorEventLoop por padrão (Python 3.8+), mas o Playwright
+# requer o SelectorEventLoop para criar subprocessos assíncronos corretamente.
+# Esta correção deve ser aplicada antes de qualquer uso do asyncio no Windows.
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import validators
 from playwright.async_api import (
     Browser,
