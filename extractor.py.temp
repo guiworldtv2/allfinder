@@ -20,7 +20,7 @@ def ensure_playwright_browsers():
         subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"], check=True)
 
 class M3U8Extractor:
-    def __init__(self, headless: bool = True, timeout: int = 120000, cookie_file: Optional[str] = None, browser_type: str = "chromium", use_profile: bool = False, profile_name: Optional[str] = None):
+    def __init__(self, headless: bool = True, timeout: int = 30000, cookie_file: Optional[str] = None, browser_type: str = "chromium", use_profile: bool = False, profile_name: Optional[str] = None):
         self.headless = headless
         self.timeout = timeout
         self.cookie_file = cookie_file
@@ -155,7 +155,7 @@ class M3U8Extractor:
             
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
-                await asyncio.sleep(10)
+                await asyncio.sleep(5)
                 
                 # Interação para disparar o player
                 await page.mouse.click(640, 360)
@@ -164,7 +164,7 @@ class M3U8Extractor:
                 if interaction_func: await interaction_func(page)
                 
                 # Monitoramento por 30-45 segundos
-                for _ in range(60):
+                for _ in range(40):
                     await self._update_metadata(page)
                     # Se encontrou M3U8 e dados de DRM, já pode parar
                     if any(".m3u8" in u.lower() for u in self.found_urls) and self.drm_data.get("license_url"):
