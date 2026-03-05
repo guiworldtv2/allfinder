@@ -21,5 +21,5 @@ async def debug_extraction(url: str):
         print(f"[!!!] Erro durante a depuração: {e}")
 
 if __name__ == "__main__":
-    test_url = "https://cdn.bitmovin.com/content/assets/art-of-motion_drm/mpds/11331.mpd"
+    test_url = "https://bitmovin.com/demos/drm/"
     asyncio.run(debug_extraction(test_url))

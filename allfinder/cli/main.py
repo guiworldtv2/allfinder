@@ -66,6 +66,8 @@ async def main():
         parser.print_help()
         return
 
+
+
     # Determina se o modo de saída é individual (excluindo --drm-only para o comportamento padrão)
     is_individual_output_mode = args.stream_url or args.stream_title or args.stream_logo or args.drm_only
     
@@ -107,7 +109,7 @@ async def main():
             f.write("#EXTM3U\n")
             for res in results:
                 if res["m3u8_urls"]:
-                    logo = " tvg-logo=\"" + str(res["thumbnail"]) + "\"" if res["thumbnail"] else ""
+                    logo = ' tvg-logo="' + str(res["thumbnail"]) + '"' if res["thumbnail"] else ""
                     title = str(res["title"]) if res["title"] != "Stream" else "Stream de " + str(res["source_url"])
                     
                     drm_tags = ""
@@ -120,7 +122,7 @@ async def main():
                         if res["drm"].get("kid"):
                             drm_tags += "#KODIPROP:inputstream.adaptive.content_id=" + str(res["drm"]["kid"]) + "\n"
                     
-                    f.write(f"#EXTINF:-1{logo} group-title=\"ALLFINDER\",{title}\n{drm_tags}{res["m3u8_urls"][0]}\n")
+                    f.write(f'#EXTINF:-1{logo} group-title="ALLFINDER",{title}\n{drm_tags}{res["m3u8_urls"][0]}\n')
         print(f"\n[✓] Arquivo \'{args.output}\' gerado com sucesso!")
     else:
         for res in results:
@@ -132,6 +134,7 @@ async def main():
                 print("Logo: " + str(res["thumbnail"]))
 
 def main_entry():
+
     asyncio.run(main())
 
 if __name__ == "__main__":

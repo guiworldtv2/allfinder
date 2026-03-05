@@ -2,25 +2,14 @@ import asyncio
 import re
 import sys
 import json
-import subprocess
 import os
 import base64
 from typing import Optional, List, Callable, Dict, Any
 from playwright.async_api import async_playwright, Request, Page, Browser, BrowserContext
 
-def ensure_playwright_browsers():
-    """Garante que os navegadores e dependências do sistema do Playwright estejam instalados."""
-    try:
-        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True, capture_output=True)
-    except Exception:
-        print("[*] Instalando dependências do navegador...")
-        is_colab = 'google.colab' in sys.modules or subprocess.run(['which', 'sudo'], capture_output=True).returncode == 0
-        cmd_prefix = ['sudo'] if is_colab else []
-        subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-        subprocess.run(cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"], check=True)
-
 class M3U8Extractor:
     def __init__(self, headless: bool = True, timeout: int = 120000, cookie_file: Optional[str] = None, browser_type: str = "chromium", use_profile: bool = False, profile_name: Optional[str] = None):
+
         self.headless = headless
         self.timeout = timeout
         self.cookie_file = cookie_file
@@ -131,7 +120,6 @@ class M3U8Extractor:
         except: pass
 
     async def extract(self, url: str, interaction_func: Optional[Callable[[Page], asyncio.Future]] = None) -> Dict[str, Any]:
-        ensure_playwright_browsers()
         self.found_urls = []
         self.thumbnail_url = None
         self.page_title = "Stream"
@@ -157,9 +145,25 @@ class M3U8Extractor:
                 await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
                 await asyncio.sleep(10)
                 
-                # Interação para disparar o player
+                # Aceitar cookies, se houver
+                try:
+                    await page.click("text=Accept all", timeout=5000)
+                except: pass
+
+                # Interação para disparar o player (genérico)
                 await page.mouse.click(640, 360)
                 await page.evaluate("window.scrollBy(0, 200)")
+
+                # Lógica específica para a página de demonstração da Bitmovin
+                if "bitmovin.com/demos/drm" in url:
+                    try:
+                        # Selecionar Widevine no dropdown de DRM
+                        await page.select_option("#available-drm-systems", "widevine")
+                        # Clicar no botão 'Load'
+                        await page.click("#load-btn")
+                        await asyncio.sleep(5) # Esperar o vídeo carregar
+                    except Exception as e:
+                        print(f"[!] Erro na interação com a página da Bitmovin: {e}")
                 
                 if interaction_func: await interaction_func(page)
                 

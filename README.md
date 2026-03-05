@@ -14,26 +14,19 @@ Uma ferramenta em Python para extrair URLs `.m3u8` e `.mpd` de sites de streamin
 
 ## Instalação
 
-### Sem Git (recomendado para Windows)
-
-Não precisa ter o Git instalado. Basta rodar no terminal:
-
-```bash
-pip install https://github.com/guiworldtv2/allfinder/releases/download/v0.2.0/allfinder-0.2.0-py3-none-any.whl
-```
-
-### Com Git instalado
+### 1. Instale o allfinder
 
 ```bash
 pip install git+https://github.com/guiworldtv2/allfinder.git
 ```
 
-### Para desenvolvimento local
+### 2. Instale o Playwright e suas dependências
+
+O `allfinder` requer o Playwright para funcionar. Instale-o com os seguintes comandos:
 
 ```bash
-git clone https://github.com/guiworldtv2/allfinder.git
-cd allfinder
-pip install -e .
+playwright install
+playwright install-deps
 ```
 
 ## Uso
@@ -76,23 +69,6 @@ allfinder https://globoplay.globo.com/v/7832875/ --browser edge --use-profile --
 
 ```bash
 allfinder --list-profiles
-```
-
-Saída de exemplo:
-```
-=== Navegadores e Perfis Detectados ===
-
-[CHROME] C:\Program Files\Google\Chrome\Application\chrome.exe
-  - Perfil: 'Default' | Dir: Default
-
-[EDGE] C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
-  - Perfil: 'Default' | Dir: Default
-  - Perfil: 'Pessoa 1' | Dir: Profile 1
-
-[FIREFOX] C:\Program Files\Mozilla Firefox\firefox.exe
-  - Perfil: 'default-release' | Dir: ...
-
-[CHROMIUM] NÃO ENCONTRADO
 ```
 
 ### Salvar resultado em arquivo .m3u
