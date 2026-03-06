@@ -1,172 +1,73 @@
 # allfinder
 
-Uma ferramenta em Python para extrair URLs `.m3u8` e `.mpd` de sites de streaming, utilizando automação de navegador (Playwright) para simular a interação do usuário e interceptar requisições de rede.
-
-## Funcionalidades
-
-- **Extração de M3U8/MPD:** Captura URLs de streaming carregadas dinamicamente pelo player de vídeo.
-- **Suporte a Múltiplos Navegadores:** Chrome, Microsoft Edge, Firefox e Chromium.
-- **Reutilização de Sessão (Perfil):** Acessa sites que exigem login reutilizando um perfil existente do navegador — sem precisar automatizar o processo de autenticação.
-- **Captura de Rede Robusta:** Filtragem avançada de URLs de rastreamento, analytics e publicidade. Normalização e priorização automática de playlists principais.
-- **Sistema de Plugins:** Plugins específicos por site (ex: Globoplay) com lógica de interação personalizada. Fallback automático para o plugin genérico.
-- **Suporte a yt-dlp:** Integração automática com yt-dlp para YouTube e outros sites compatíveis.
-- **Modo Headless:** Suporte para execução sem interface gráfica.
+**allfinder** é uma ferramenta poderosa para extrair URLs de mídia (M3U8/MPD) de páginas web, utilizando automação de navegador com Playwright. Ele suporta a detecção automática de DRM (Widevine/PlayReady) e gera arquivos `.m3u` compatíveis com players como o Kodi.
 
 ## Instalação
 
-### 1. Instale o allfinder
+Para instalar o `allfinder`, siga os passos abaixo:
 
-```bash
-pip install git+https://github.com/guiworldtv2/allfinder.git
-```
+1.  **Instale o Playwright e seus navegadores:**
 
-### 2. Instale o Playwright e suas dependências
+    O `allfinder` depende do Playwright para automação de navegador. Você precisa instalar o Playwright e os navegadores que ele utiliza (recomendamos o Chromium) manualmente. Abra seu terminal e execute:
 
-O `allfinder` requer o Playwright para funcionar. Instale-o com os seguintes comandos:
+    ```bash
+    pip install playwright
+    playwright install chromium
+    ```
 
-```bash
-playwright install
-playwright install-deps
-```
+    Se você estiver em um ambiente como o Google Colab ou tiver problemas de permissão, pode ser necessário usar `sudo` ou instalar as dependências do sistema:
+
+    ```bash
+    sudo playwright install chromium
+    sudo playwright install-deps chromium
+    ```
+
+2.  **Instale o allfinder:**
+
+    Você pode instalar a versão mais recente diretamente do GitHub:
+
+    ```bash
+    pip install --upgrade --no-cache-dir git+https://github.com/guiworldtv2/allfinder.git
+    ```
+
+    Para evitar problemas de cache em ambientes como o Google Colab, sempre use `--no-cache-dir`.
 
 ## Uso
 
-### Uso básico
+Para usar o `allfinder`, basta fornecer a URL da página que contém o vídeo:
 
 ```bash
-allfinder https://exemplo.com/video-com-streaming
+allfinder "SUA_URL_AQUI"
 ```
 
-### Escolher o navegador
+### Detecção de DRM
+
+O `allfinder` agora detecta automaticamente informações de DRM (Widevine/PlayReady) e as inclui na saída, se disponíveis. Você não precisa mais especificar a flag `--drm` explicitamente, a menos que queira forçar a exibição de informações técnicas de DRM mesmo quando não há uma saída de M3U8/MPD.
+
+Exemplo de uso (a detecção de DRM é automática):
 
 ```bash
-# Usar o Google Chrome instalado no sistema
-allfinder https://exemplo.com/live --browser chrome
-
-# Usar o Microsoft Edge
-allfinder https://exemplo.com/live --browser edge
-
-# Usar o Firefox
-allfinder https://exemplo.com/live --browser firefox
+allfinder "https://bitmovin.com/demos/drm/"
 ```
 
-### Reutilizar sessão logada (perfil existente)
+Se o DRM for detectado, o `allfinder` gerará um arquivo `.m3u` com as tags `#KODIPROP` contendo as chaves de licença, permitindo que players compatíveis reproduzam o conteúdo protegido.
 
-Esta é a funcionalidade mais poderosa para sites que exigem assinatura. O navegador deve estar previamente logado no perfil especificado. **Feche o navegador antes de rodar o comando.**
+### Opções
+
+*   `--output FILENAME`: Salva a saída em um arquivo `.m3u` ou `.mpd`.
+*   `--browser BROWSER`: Especifica o navegador a ser usado (chromium, firefox, webkit).
+*   `--headless`: Executa o navegador em modo headless (sem interface gráfica). Padrão: `True`.
+*   `--timeout TIMEOUT`: Define o tempo limite para a operação do navegador em milissegundos. Padrão: `30000` (30 segundos).
+*   `--drm`: Exibe informações técnicas de DRM (PSSH, KID, License URL) na saída padrão, mesmo que não haja um M3U8/MPD para extrair. A detecção de DRM é automática e não requer esta flag para funcionar.
+
+## Desenvolvimento
+
+Para contribuir ou desenvolver o `allfinder` localmente:
 
 ```bash
-# Usar o perfil padrão do Edge (já logado no Globoplay, por exemplo)
-allfinder https://globoplay.globo.com/v/7832875/ --browser edge --use-profile --no-headless
-
-# Especificar o nome do perfil
-allfinder https://globoplay.globo.com/v/7832875/ --browser edge --use-profile --profile "Pessoa 1" --no-headless
-
-# Salvar resultado em arquivo .m3u
-allfinder https://globoplay.globo.com/v/7832875/ --browser edge --use-profile --profile "Pessoa 1" --no-headless -o globo.m3u
+git clone https://github.com/guiworldtv2/allfinder.git
+cd allfinder
+pip install -e .
 ```
 
-### Listar perfis disponíveis
-
-```bash
-allfinder --list-profiles
-```
-
-### Salvar resultado em arquivo .m3u
-
-```bash
-allfinder https://exemplo.com/live -o minha_lista.m3u
-```
-
-### Usar cookies de arquivo
-
-```bash
-# Arquivo JSON (formato do EditThisCookie)
-allfinder https://exemplo.com/live --cookies cookies.json
-
-# Arquivo Netscape (.txt, exportado pelo browser)
-allfinder https://exemplo.com/live --cookies cookies.txt
-```
-
-### Múltiplas URLs
-
-```bash
-allfinder https://site1.com/live https://site2.com/stream -o lista.m3u
-```
-
-## Opções Completas
-
-```
-Opções de Navegador:
-  --browser {chrome,edge,firefox,chromium}
-                        Navegador a ser usado (padrão: chromium).
-  --use-profile         Reutiliza um perfil existente do navegador para acessar
-                        sites que exigem login.
-  --profile NOME_DO_PERFIL
-                        Nome do perfil do navegador a usar (ex: "Pessoa 1").
-  --list-profiles       Lista todos os navegadores e perfis detectados e sai.
-
-Opções de Execução:
-  --headless            Executa o navegador em modo headless (padrão).
-  --no-headless         Executa o navegador com interface gráfica.
-  --timeout TIMEOUT     Tempo limite em milissegundos (padrão: 60000).
-
-Opções de Cookies:
-  --cookies-from-browser {chrome,edge}
-                        Importa cookies do navegador especificado.
-  --cookies COOKIES     Caminho para um arquivo de cookies (.txt ou .json).
-
-Saída:
-  --output, -o OUTPUT   Caminho para salvar o arquivo .m3u resultante.
-```
-
-## Arquitetura
-
-```
-src/allfinder/
-├── core/
-│   ├── extractor.py        # Extrator principal (Playwright)
-│   ├── browser_profile.py  # Detecção e reutilização de perfis de navegador
-│   └── network_capture.py  # Captura e filtragem de tráfego de rede
-├── plugins/
-│   ├── generic/
-│   │   └── base.py         # BasePlugin e GenericPlugin (fallback)
-│   ├── specific_sites/
-│   │   └── globoplay.py    # Plugin específico para o Globoplay
-│   └── manager.py          # Gerenciador de plugins
-└── cli/
-    └── main.py             # Interface de linha de comando
-```
-
-### Criando um Plugin Personalizado
-
-```python
-from allfinder.plugins.generic.base import BasePlugin
-from playwright.async_api import Page
-import asyncio
-
-class MeuSitePlugin(BasePlugin):
-    @property
-    def name(self) -> str:
-        return "Meu Site"
-
-    @property
-    def domain_pattern(self) -> str:
-        return r"meusite\.com"
-
-    async def interact(self, page: Page) -> None:
-        # Clica no botão de play específico do site
-        await page.click(".meu-botao-play")
-        await asyncio.sleep(2)
-```
-
-Registre o plugin:
-
-```python
-from allfinder.plugins.manager import PluginManager
-manager = PluginManager()
-manager.register_plugin(MeuSitePlugin())
-```
-
-## Licença
-
-Este projeto está licenciado sob a licença MIT.
+Certifique-se de ter o Playwright e seus navegadores instalados conforme as instruções acima.
