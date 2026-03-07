@@ -15,12 +15,9 @@ Melhorias em relação à versão anterior:
 """
 
 import asyncio
-import concurrent.futures
 import json
 import os
 import re
-import subprocess
-import sys
 import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
 
@@ -39,79 +36,7 @@ from allfinder.core.browser_profile import (
     detect_available_browsers,
     get_profile,
 )
-from allfinder.core.network_capture import NetworkCapture
-
-
-# ---------------------------------------------------------------------------
-# Instalação automática dos navegadores do Playwright
-# ---------------------------------------------------------------------------
-
-def ensure_playwright_browsers():
-    """Garante que os navegadores do Playwright estejam instalados.
-
-    Compatível com Windows, Linux e macOS. No Windows, não tenta usar
-    'sudo' nem 'apt-get', pois esses comandos não existem.
-    """
-    is_windows = sys.platform.startswith("win")
-    is_colab = "google.colab" in sys.modules
-    env = os.environ.copy()
-
-    # Verifica se o Chromium já está instalado
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium", "--dry-run"],
-            capture_output=True, text=True,
-        )
-        if "browser is already installed" in result.stdout.lower():
-            return
-    except Exception:
-        pass
-
-    print("[*] Instalando o Chromium do Playwright (isso pode levar alguns minutos)...")
-
-    if is_windows:
-        # No Windows não existe sudo nem apt-get
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "playwright", "install", "chromium"],
-                check=True, env=env,
-            )
-            print("[✓] Chromium instalado com sucesso!")
-        except subprocess.CalledProcessError as e:
-            print(f"[!] Erro ao instalar o Chromium: {e}")
-            print("[!] Tente manualmente: python -m playwright install chromium")
-    else:
-        # Linux / macOS — tenta usar sudo se disponível
-        has_sudo = subprocess.run(
-            ["which", "sudo"], capture_output=True
-        ).returncode == 0
-        env["DEBIAN_FRONTEND"] = "noninteractive"
-        cmd_prefix = ["sudo", "-E"] if (is_colab or has_sudo) else []
-
-        try:
-            subprocess.run(
-                cmd_prefix + [sys.executable, "-m", "playwright", "install", "chromium"],
-                check=True, env=env,
-            )
-            if is_colab or has_sudo:
-                subprocess.run(
-                    ["sudo", "-E", "apt-get", "update", "-y"],
-                    check=True, env=env, capture_output=True,
-                )
-            subprocess.run(
-                cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"],
-                check=True, env=env,
-            )
-            print("[✓] Navegador e dependências instalados com sucesso!")
-        except subprocess.CalledProcessError as e:
-            print(f"[!] Erro durante a instalação: {e}")
-            try:
-                subprocess.run(
-                    cmd_prefix + [sys.executable, "-m", "playwright", "install-deps", "chromium"],
-                    check=True, env=env,
-                )
-            except Exception:
-                print("[!] Falha ao instalar dependências. O navegador pode não funcionar corretamente.")
+from allfinder.core.network_capture import NetworkCapture, DRMInfo
 
 
 # ---------------------------------------------------------------------------
@@ -287,10 +212,71 @@ class M3U8Extractor:
         """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
         self._capture._process_url(request.url)
         self.found_urls = self._capture.get_urls()
+        await self._handle_drm_request(request)
 
     # -----------------------------------------------------------------------
     # Extração de metadados da página
     # -----------------------------------------------------------------------
+
+    async def _interact_with_page(self, page: Page):
+        """Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."""
+        print("[*] Tentando interagir com a página...")
+        try:
+            # Tenta aceitar cookies ou fechar popups
+            await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
+            print("[*] Clicou em 'Aceitar' cookies.")
+        except Exception:
+            pass
+        try:
+            await page.locator("text=Concordar", has_text="Concordar").click(timeout=2000)
+            print("[*] Clicou em 'Concordar' cookies.")
+        except Exception:
+            pass
+        try:
+            await page.locator("button:has-text('Entendi')").click(timeout=2000)
+            print("[*] Clicou em 'Entendi' (popup).")
+        except Exception:
+            pass
+
+        # Tenta clicar em botões de play genéricos
+        play_selectors = [
+            "button[aria-label='Play']",
+            "button[title='Play']",
+            ".vjs-big-play-button",
+            ".jw-icon-playback",
+            ".play-button",
+            ".video-play-button",
+            ".flickity-button-icon", # Fox News specific
+        ]
+        for selector in play_selectors:
+            try:
+                await page.locator(selector).click(timeout=2000)
+                print(f"[*] Clicou no botão de play: {selector}")
+                await asyncio.sleep(1) # Pequena pausa para o player iniciar
+                break
+            except Exception:
+                pass
+
+        # Rola a página para garantir que elementos dinâmicos sejam carregados
+        # Simula rolagem para baixo e para cima para carregar conteúdo lazy-loaded
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(2) # Espera um pouco para o conteúdo carregar
+        await page.evaluate("window.scrollTo(0, 0)")
+        await asyncio.sleep(1)
+
+        # Tenta mover o mouse para o centro da tela para ativar elementos (se houver)
+        try:
+            viewport_size = page.viewport_size
+            if viewport_size:
+                await page.mouse.move(viewport_size['width'] / 2, viewport_size['height'] / 2)
+                await asyncio.sleep(0.5)
+        except Exception:
+            pass
+
+        # Espera por um curto período para que qualquer token ou stream dinâmico seja capturado
+        await asyncio.sleep(3) # Aumenta o tempo de espera para captura de tokens/DRM
+
+        print("[*] Interação com a página concluída.")
 
     async def _update_metadata(self, page: Page):
         """Extrai título e thumbnail da página via JavaScript injetado."""
@@ -312,10 +298,7 @@ class M3U8Extractor:
                     const el = document.querySelector(sel);
                     if (el && el.innerText.trim().length > 5) {
                         foundTitle = el.innerText.trim();
-                        break;
-                    }
-                }
-                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
+         const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
                 return {
                     title: foundTitle || metaTitle || document.title,
                     og_image: getMeta('og:image'),
@@ -326,304 +309,192 @@ class M3U8Extractor:
                 };
             }""")
 
-            if metadata.get("title") and len(metadata["title"]) > 5:
-                clean_title = re.sub(r"\s*\|\s*.*$", "", metadata["title"])
-                clean_title = re.sub(
-                    r"\s*-\s*(Fox News|ABC News|Globoplay|NBC News).*$",
-                    "", clean_title, flags=re.IGNORECASE,
-                )
-                self.page_title = clean_title.strip()
-
-            if not self.thumbnail_url or "glbimg.com" not in self.thumbnail_url:
-                new_thumb = (
+            if metadata:
+                if metadata.get("title"):
+                    self.page_title = metadata["title"].strip()
+                thumbnail = (
                     metadata.get("og_image")
                     or metadata.get("twitter_image")
                     or metadata.get("poster")
                 )
-                if new_thumb:
-                    self.thumbnail_url = new_thumb
+                if thumbnail and validators.url(thumbnail):
+                    self.thumbnail_url = thumbnail
 
-        except Exception:
-            pass
-
-    # -----------------------------------------------------------------------
-    # Extração via yt-dlp
-    # -----------------------------------------------------------------------
-
-    def _extract_with_ytdlp(self, url: str) -> Optional[str]:
-        """Tenta extrair o link m3u8 usando yt-dlp (útil para YouTube e outros sites complexos)."""
-        try:
-            subprocess.run(["yt-dlp", "--version"], capture_output=True, check=True)
-            cmd = ["yt-dlp", "-g", "-f", "best", url]
-            if self.cookies_file:
-                cmd.extend(["--cookies", self.cookies_file])
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                potential_url = result.stdout.strip()
-                if ".m3u8" in potential_url.lower() or "manifest" in potential_url.lower():
-                    return potential_url
-        except Exception:
-            pass
-        return None
+        except Exception as e:
+            print(f"\n[!] Erro ao extrair metadados: {e}")
 
     # -----------------------------------------------------------------------
-    # Construção do contexto Playwright (com ou sem perfil)
+    # Lógica principal de extração
     # -----------------------------------------------------------------------
 
-    async def _create_browser_and_context(self, playwright_instance):
+    async def extract(self, url: str, plugin: Any) -> Dict[str, Any]:
         """
-        Cria o navegador e o contexto do Playwright.
+        Executa a extração de mídia para uma única URL.
 
-        Se use_profile=True e um perfil for encontrado, usa um contexto
-        persistente que reutiliza cookies e sessões do navegador real.
-        Caso contrário, usa o fluxo padrão (contexto efêmero).
-
-        Retorna (browser_ou_none, context, is_persistent).
-        """
-        profile = self._resolve_profile()
-        self._profile = profile
-
-        common_args = [
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--mute-audio",
-        ]
-
-        user_agent = (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        )
-
-        if profile:
-            # Modo com perfil: contexto persistente
-            kwargs = build_playwright_launch_kwargs(profile)
-            browser_type_name = kwargs["browser_type"]
-            browser_type = getattr(playwright_instance, browser_type_name)
-
-            launch_kwargs: Dict[str, Any] = {
-                "headless": self.headless,
-                "args": common_args,
-            }
-            if kwargs.get("channel"):
-                launch_kwargs["channel"] = kwargs["channel"]
-            elif kwargs.get("executable_path"):
-                launch_kwargs["executable_path"] = kwargs["executable_path"]
-
-            context = await browser_type.launch_persistent_context(
-                user_data_dir=kwargs["user_data_dir"],
-                **launch_kwargs,
-            )
-            return None, context, True
-
-        else:
-            # Modo padrão: navegador efêmero
-            browser_map = {
-                "chrome": ("chromium", "chrome"),
-                "edge": ("chromium", "msedge"),
-                "firefox": ("firefox", None),
-                "chromium": ("chromium", None),
-            }
-            browser_type_name, channel = browser_map.get(
-                self.browser_name, ("chromium", None)
-            )
-            browser_type = getattr(playwright_instance, browser_type_name)
-
-            launch_kwargs = {
-                "headless": self.headless,
-                "args": common_args,
-            }
-            if channel:
-                launch_kwargs["channel"] = channel
-
-            browser: Browser = await browser_type.launch(**launch_kwargs)
-            context = await browser.new_context(user_agent=user_agent)
-            return browser, context, False
-
-    # -----------------------------------------------------------------------
-    # Método principal de extração
-    # -----------------------------------------------------------------------
-
-    async def extract(
-        self,
-        url: str,
-        interaction_func: Optional[Callable[[Page], asyncio.Future]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Extrai URLs de mídia de uma página web.
-
-        No Windows, o Playwright requer o SelectorEventLoop, mas o Jupyter
-        e o Python 3.8+ usam ProactorEventLoop por padrão. Para contornar
-        isso, a extração é executada em uma thread separada com seu próprio
-        SelectorEventLoop quando rodando no Windows.
-
-        Parâmetros
-        ----------
-        url : str
-            URL da página de streaming.
-        interaction_func : callable, opcional
-            Função assíncrona que recebe a Page e realiza interações (ex: clicar no play).
-
-        Retorna
-        -------
-        dict com chaves "title", "m3u8_urls" e "thumbnail".
+        Retorna um dicionário com as URLs encontradas, título e thumbnail.
         """
         if not self.validate_url(url):
-            raise ValueError(f"URL inválida ou insegura: {url}")
+            return {
+                "urls": [],
+                "title": "URL Inválida",
+                "thumbnail": None,
+                "drm_info": None,
+            }
 
-        # Garante que o Chromium está instalado ANTES de entrar na thread
-        # (subprocess síncrono, não depende do event loop)
-        ensure_playwright_browsers()
-
-        # No Windows, roda em thread separada com SelectorEventLoop para
-        # contornar a incompatibilidade do ProactorEventLoop com o Playwright.
-        if sys.platform.startswith("win"):
-            loop = asyncio.get_event_loop()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                result = await loop.run_in_executor(
-                    pool,
-                    lambda: _run_in_selector_loop(self._extract_core, url, interaction_func),
-                )
-            return result
-
-        # Delega para _extract_core (reutilizado pelo path Windows acima)
-        return await self._extract_core(url, interaction_func)
-
-    async def _extract_core(
-        self,
-        url: str,
-        interaction_func: Optional[Callable[[Page], asyncio.Future]] = None,
-    ) -> Dict[str, Any]:
-        """Núcleo da extração — roda dentro do event loop correto.
-
-        Nota: ensure_playwright_browsers() já foi chamado antes de chegar aqui.
-        """
-
-        # Tenta yt-dlp primeiro para YouTube
-        if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-            ytdl_url = self._extract_with_ytdlp(url)
-            if ytdl_url:
-                title = "YouTube Live"
-                try:
-                    res = subprocess.run(
-                        ["yt-dlp", "--get-title", url], capture_output=True, text=True
-                    )
-                    if res.returncode == 0:
-                        title = res.stdout.strip()
-                except Exception:
-                    pass
-                vid_id = url.split("v=")[-1] if "v=" in url else "live"
-                return {
-                    "title": title,
-                    "m3u8_urls": [ytdl_url],
-                    "thumbnail": f"https://img.youtube.com/vi/{vid_id}/maxresdefault.jpg",
-                }
-
-        # Reinicia o estado
-        self._capture.reset()
-        self.found_urls = []
-        self.thumbnail_url = None
-        self.page_title = "Stream"
+        self._profile = self._resolve_profile()
+        launch_kwargs = build_playwright_launch_kwargs(self._profile, self.headless)
 
         async with async_playwright() as p:
-            browser, context, is_persistent = await self._create_browser_and_context(p)
-
-            # Carrega cookies de arquivo (apenas em contexto não-persistente)
-            if not is_persistent:
-                file_cookies = self._parse_cookies_file()
-                if file_cookies:
-                    await context.add_cookies(file_cookies)
-                    print(f"[*] {len(file_cookies)} cookies carregados do arquivo.")
-
-            page: Page = await context.new_page()
-
-            # Mascara a propriedade navigator.webdriver
-            await page.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            )
-
-            # Registra o handler de captura de rede
-            page.on("request", lambda req: self._capture._process_url(req.url))
-
+            browser_instance = p[self.browser_name]
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout)
-
-                # Thumbnail específica do Globo (por ID de vídeo na URL)
-                if "globo.com" in url:
-                    video_id_match = re.search(r"/v/(\d+)", url)
-                    if video_id_match:
-                        self.thumbnail_url = (
-                            f"https://s04.video.glbimg.com/x720/{video_id_match.group(1)}.jpg"
-                        )
-
-                # Executa a função de interação do plugin
-                if interaction_func:
-                    await interaction_func(page)
-
-                # Aguarda e coleta streams
-                for i in range(45):
-                    await self._update_metadata(page)
-                    self.found_urls = self._capture.get_urls()
-
-                    has_priority = self._capture.has_priority_stream()
-                    if has_priority and self.page_title != "Stream" and i > 5:
-                        break
-
-                    await asyncio.sleep(1)
-
-                self.found_urls = self._capture.get_urls()
-
+                browser = await browser_instance.launch(**launch_kwargs)
             except Exception as e:
-                self.found_urls = self._capture.get_urls()
-                if not self.found_urls:
+                if "looks like you are trying to access a browser that is not owned by this Playwright instance" in str(e):
+                    print("[!] Tentando lançar navegador a partir do executável do perfil...")
+                    if self._profile and self._profile.executable_path:
+                        launch_kwargs['executable_path'] = self._profile.executable_path
+                        browser = await browser_instance.launch(**launch_kwargs)
+                    else:
+                        raise e
+                else:
                     raise e
 
+            context = await self._create_browser_context(browser)
+            page = await context.new_page()
+
+            # Mascaramento de automação
+            await page.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+            )
+
+            # Captura de rede
+            page.on("request", self._handle_request)
+
+            try:
+                print(f"[*] Navegando para: {url}")
+                await page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
+
+                # Interage com a página para carregar conteúdo dinâmico
+                await self._interact_with_page(page)
+
+
+                # Lógica de interação do plugin
+                if plugin:
+                    await plugin.interact(page)
+
+                # Loop de espera e atualização de metadados
+                for _ in range(int(self.timeout / 2000)):
+                    await self._update_metadata(page)
+                    if self._capture.has_urls():
+                        break
+                    await asyncio.sleep(2)
+
+            except Exception as e:
+                print(f"\n[!] Erro durante a navegação/interação: {e}")
+
             finally:
-                if is_persistent:
-                    await context.close()
-                else:
-                    if browser:
-                        await browser.close()
+                self.found_urls = self._capture.get_urls()
+                drm_info = self._capture.get_drm_info()
+
+                await browser.close()
 
         return {
-            "title": self.page_title.strip(),
-            "m3u8_urls": self.found_urls,
+            "urls": self.found_urls,
+            "title": self.page_title,
             "thumbnail": self.thumbnail_url,
+            "drm_info": self._capture.get_drm_info(),
         }
 
+    async def _handle_drm_request(self, request: Request):
+        """Processa requisições de DRM para extrair license_url, PSSH e KID."""
+        # Widevine
+        if "widevine" in request.url and request.method == "POST":
+            try:
+                post_data = request.post_data_buffer
+                if post_data:
+                    # Tenta decodificar como JSON (PlayReady)
+                    try:
+                        data = json.loads(post_data.decode("utf-8"))
+                        if "challenge" in data:
+                            # Isso é mais comum para PlayReady, mas alguns Widevine podem usar
+                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=data.get("pssh"))
+                    except json.JSONDecodeError:
+                        # Se não for JSON, pode ser o formato binário do Widevine
+                        # O PSSH geralmente é encontrado no corpo da requisição
+                        pssh_match = re.search(b"\x08\x01\x12\x10(.{16})", post_data)
+                        if pssh_match:
+                            pssh_bytes = pssh_match.group(1)
+                            # Converte para base64 se necessário, ou mantém como bytes
+                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=pssh_bytes.hex())
+            except Exception as e:
+                print(f"[!] Erro ao processar requisição Widevine: {e}")
 
-# ---------------------------------------------------------------------------
-# Função auxiliar para execução em SelectorEventLoop (Windows)
-# ---------------------------------------------------------------------------
+        # PlayReady
+        elif "playready" in request.url and request.method == "POST":
+            try:
+                post_data = request.post_data_buffer
+                if post_data:
+                    # PlayReady geralmente envia um XML ou JSON
+                    try:
+                        data = json.loads(post_data.decode("utf-8"))
+                        # Lógica para extrair PSSH/KID de JSON PlayReady
+                        if "challenge" in data:
+                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=data.get("pssh"))
+                    except json.JSONDecodeError:
+                        # Tenta como XML
+                        if b"<Challenge>" in post_data:
+                            # Lógica para extrair PSSH/KID de XML PlayReady
+                            pssh_match = re.search(b"<Challenge>(.*?)</Challenge>", post_data)
+                            if pssh_match:
+                                pssh_base64 = pssh_match.group(1).decode("utf-8")
+                                self._capture._drm_info = DRMInfo(license_url=request.url, pssh=pssh_base64)
+            except Exception as e:
+                print(f"[!] Erro ao processar requisição PlayReady: {e}")
 
-def _run_in_selector_loop(coro_func, *args, **kwargs):
-    """
-    Executa uma coroutine em um novo SelectorEventLoop.
+        # Tenta extrair KID de URLs de licença (comum em alguns sistemas)
+        kid_match = re.search(r"kid=([0-9a-fA-F]{32})", request.url)
+        if kid_match:
+            if not self._capture._drm_info:
+                self._capture._drm_info = DRMInfo()
+            self._capture._drm_info.kid = kid_match.group(1)
 
-    Usada no Windows para contornar a incompatibilidade entre o
-    ProactorEventLoop (padrão do Windows/Jupyter) e o Playwright,
-    que requer o SelectorEventLoop para criar subprocessos assíncronos.
+    async def _create_browser_context(self, browser: Browser) -> BrowserContext:
+        """Cria um contexto de navegador com cookies e perfil, se aplicável."""
+        context_kwargs = {}
+        if self._profile and self._profile.user_data_dir:
+            # Lança um contexto persistente se um perfil for usado
+            context = await browser.new_context(
+                user_agent=(self._profile.user_agent or None),
+                viewport=self._profile.viewport or None,
+                **context_kwargs
+            )
+        else:
+            # Contexto normal (não persistente)
+            context = await browser.new_context(**context_kwargs)
 
-    Esta função é chamada dentro de uma thread separada via ThreadPoolExecutor,
-    garantindo que o loop principal do Jupyter não seja afetado.
+        # Carrega cookies
+        cookies = self._parse_cookies_file()
+        if self.cookies_from_browser:
+            try:
+                from browser_cookie3 import load
+                domain = urllib.parse.urlparse(self.found_urls[0]).netloc if self.found_urls else ''
+                cj = load(self.cookies_from_browser, domain_name=domain)
+                for cookie in cj:
+                    cookies.append({
+                        "name": cookie.name,
+                        "value": cookie.value,
+                        "domain": cookie.domain,
+                        "path": cookie.path,
+                        "expires": cookie.expires or -1,
+                        "httpOnly": cookie.has_nonstandard_attr("HttpOnly"),
+                        "secure": cookie.secure,
+                    })
+            except ImportError:
+                print("[!] Para usar --cookies-from-browser, instale 'browser-cookie3'.")
+            except Exception as e:
+                print(f"[!] Erro ao carregar cookies do navegador: {e}")
 
-    Parâmetros
-    ----------
-    coro_func : coroutine function
-        Função assíncrona a ser executada (ex: extractor._extract_core).
-    *args, **kwargs
-        Argumentos passados para coro_func.
+        if cookies:
+            await context.add_cookies(cookies)
 
-    Retorna
-    -------
-    O resultado da coroutine.
-    """
-    # Cria um SelectorEventLoop explícito nesta thread
-    loop = asyncio.SelectorEventLoop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro_func(*args, **kwargs))
-    finally:
-        loop.close()
+        return context

@@ -36,7 +36,7 @@ from allfinder.core.browser_profile import (
     detect_available_browsers,
     get_profile,
 )
-from allfinder.core.network_capture import NetworkCapture
+from allfinder.core.network_capture import NetworkCapture, DRMInfo
 
 
 # ---------------------------------------------------------------------------
@@ -212,10 +212,71 @@ class M3U8Extractor:
         """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
         self._capture._process_url(request.url)
         self.found_urls = self._capture.get_urls()
+        await self._handle_drm_request(request)
 
     # -----------------------------------------------------------------------
     # Extração de metadados da página
     # -----------------------------------------------------------------------
+
+    async def _interact_with_page(self, page: Page):
+        """Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."""
+        print("[*] Tentando interagir com a página...")
+        try:
+            # Tenta aceitar cookies ou fechar popups
+            await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
+            print("[*] Clicou em 'Aceitar' cookies.")
+        except Exception:
+            pass
+        try:
+            await page.locator("text=Concordar", has_text="Concordar").click(timeout=2000)
+            print("[*] Clicou em 'Concordar' cookies.")
+        except Exception:
+            pass
+        try:
+            await page.locator("button:has-text('Entendi')").click(timeout=2000)
+            print("[*] Clicou em 'Entendi' (popup).")
+        except Exception:
+            pass
+
+        # Tenta clicar em botões de play genéricos
+        play_selectors = [
+            "button[aria-label='Play']",
+            "button[title='Play']",
+            ".vjs-big-play-button",
+            ".jw-icon-playback",
+            ".play-button",
+            ".video-play-button",
+            ".flickity-button-icon", # Fox News specific
+        ]
+        for selector in play_selectors:
+            try:
+                await page.locator(selector).click(timeout=2000)
+                print(f"[*] Clicou no botão de play: {selector}")
+                await asyncio.sleep(1) # Pequena pausa para o player iniciar
+                break
+            except Exception:
+                pass
+
+        # Rola a página para garantir que elementos dinâmicos sejam carregados
+        # Simula rolagem para baixo e para cima para carregar conteúdo lazy-loaded
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await asyncio.sleep(2) # Espera um pouco para o conteúdo carregar
+        await page.evaluate("window.scrollTo(0, 0)")
+        await asyncio.sleep(1)
+
+        # Tenta mover o mouse para o centro da tela para ativar elementos (se houver)
+        try:
+            viewport_size = page.viewport_size
+            if viewport_size:
+                await page.mouse.move(viewport_size['width'] / 2, viewport_size['height'] / 2)
+                await asyncio.sleep(0.5)
+        except Exception:
+            pass
+
+        # Espera por um curto período para que qualquer token ou stream dinâmico seja capturado
+        await asyncio.sleep(3) # Aumenta o tempo de espera para captura de tokens/DRM
+
+        print("[*] Interação com a página concluída.")
 
     async def _update_metadata(self, page: Page):
         """Extrai título e thumbnail da página via JavaScript injetado."""
@@ -237,10 +298,7 @@ class M3U8Extractor:
                     const el = document.querySelector(sel);
                     if (el && el.innerText.trim().length > 5) {
                         foundTitle = el.innerText.trim();
-                        break;
-                    }
-                }
-                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
+         const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
                 return {
                     title: foundTitle || metaTitle || document.title,
                     og_image: getMeta('og:image'),
@@ -316,6 +374,10 @@ class M3U8Extractor:
                 print(f"[*] Navegando para: {url}")
                 await page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
 
+                # Interage com a página para carregar conteúdo dinâmico
+                await self._interact_with_page(page)
+
+
                 # Lógica de interação do plugin
                 if plugin:
                     await plugin.interact(page)
@@ -340,8 +402,61 @@ class M3U8Extractor:
             "urls": self.found_urls,
             "title": self.page_title,
             "thumbnail": self.thumbnail_url,
-            "drm_info": drm_info,
+            "drm_info": self._capture.get_drm_info(),
         }
+
+    async def _handle_drm_request(self, request: Request):
+        """Processa requisições de DRM para extrair license_url, PSSH e KID."""
+        # Widevine
+        if "widevine" in request.url and request.method == "POST":
+            try:
+                post_data = request.post_data_buffer
+                if post_data:
+                    # Tenta decodificar como JSON (PlayReady)
+                    try:
+                        data = json.loads(post_data.decode("utf-8"))
+                        if "challenge" in data:
+                            # Isso é mais comum para PlayReady, mas alguns Widevine podem usar
+                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=data.get("pssh"))
+                    except json.JSONDecodeError:
+                        # Se não for JSON, pode ser o formato binário do Widevine
+                        # O PSSH geralmente é encontrado no corpo da requisição
+                        pssh_match = re.search(b"\x08\x01\x12\x10(.{16})", post_data)
+                        if pssh_match:
+                            pssh_bytes = pssh_match.group(1)
+                            # Converte para base64 se necessário, ou mantém como bytes
+                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=pssh_bytes.hex())
+            except Exception as e:
+                print(f"[!] Erro ao processar requisição Widevine: {e}")
+
+        # PlayReady
+        elif "playready" in request.url and request.method == "POST":
+            try:
+                post_data = request.post_data_buffer
+                if post_data:
+                    # PlayReady geralmente envia um XML ou JSON
+                    try:
+                        data = json.loads(post_data.decode("utf-8"))
+                        # Lógica para extrair PSSH/KID de JSON PlayReady
+                        if "challenge" in data:
+                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=data.get("pssh"))
+                    except json.JSONDecodeError:
+                        # Tenta como XML
+                        if b"<Challenge>" in post_data:
+                            # Lógica para extrair PSSH/KID de XML PlayReady
+                            pssh_match = re.search(b"<Challenge>(.*?)</Challenge>", post_data)
+                            if pssh_match:
+                                pssh_base64 = pssh_match.group(1).decode("utf-8")
+                                self._capture._drm_info = DRMInfo(license_url=request.url, pssh=pssh_base64)
+            except Exception as e:
+                print(f"[!] Erro ao processar requisição PlayReady: {e}")
+
+        # Tenta extrair KID de URLs de licença (comum em alguns sistemas)
+        kid_match = re.search(r"kid=([0-9a-fA-F]{32})", request.url)
+        if kid_match:
+            if not self._capture._drm_info:
+                self._capture._drm_info = DRMInfo()
+            self._capture._drm_info.kid = kid_match.group(1)
 
     async def _create_browser_context(self, browser: Browser) -> BrowserContext:
         """Cria um contexto de navegador com cookies e perfil, se aplicável."""

@@ -8,7 +8,7 @@ Módulos principais do allfinder.
 - network_capture: Captura e filtragem de tráfego de rede.
 """
 
-from allfinder.core.extractor import M3U8Extractor, ensure_playwright_browsers
+from allfinder.core.extractor import M3U8Extractor
 from allfinder.core.browser_profile import (
     BrowserProfile,
     detect_available_browsers,
@@ -20,7 +20,7 @@ from allfinder.core.network_capture import NetworkCapture, CapturedStream
 
 __all__ = [
     "M3U8Extractor",
-    "ensure_playwright_browsers",
+
     "BrowserProfile",
     "detect_available_browsers",
     "list_profiles",

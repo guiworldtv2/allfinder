@@ -17,7 +17,7 @@ Funcionalidades:
 
 import re
 import urllib.parse
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict
 from dataclasses import dataclass, field
 
 
@@ -67,12 +67,19 @@ MEDIA_EXTENSIONS: List[str] = [".m3u8", ".mpd"]
 # ---------------------------------------------------------------------------
 
 @dataclass
+class DRMInfo:
+    license_url: Optional[str] = None
+    pssh: Optional[str] = None
+    kid: Optional[str] = None
+
+@dataclass
 class CapturedStream:
     """Representa uma URL de stream capturada e classificada."""
     url: str
     format: str        # "hls" | "dash" | "unknown"
     is_priority: bool  # True se for uma playlist principal (master/index/etc.)
     raw_url: str       # URL original antes da normalização
+    drm_info: Optional[DRMInfo] = None
 
 
 # ---------------------------------------------------------------------------
@@ -179,11 +186,13 @@ class NetworkCapture:
         self.normalize = normalize
         self._streams: List[CapturedStream] = []
         self._seen_urls: Set[str] = set()
+        self._drm_info: Optional[DRMInfo] = None
 
     def reset(self):
         """Limpa todas as URLs capturadas. Útil ao processar múltiplas páginas."""
         self._streams.clear()
         self._seen_urls.clear()
+        self._drm_info = None
 
     def handle_request(self, request) -> None:
         """
@@ -231,6 +240,7 @@ class NetworkCapture:
             format=_detect_format(final_url),
             is_priority=_is_priority(final_url),
             raw_url=raw_url,
+            drm_info=self._drm_info,
         )
 
         # URLs prioritárias vão para o início da lista
@@ -246,6 +256,10 @@ class NetworkCapture:
     def get_urls(self) -> List[str]:
         """Retorna apenas as URLs dos streams capturados."""
         return [s.url for s in self._streams]
+
+    def get_drm_info(self) -> Optional[DRMInfo]:
+        """Retorna as informações de DRM capturadas."""
+        return self._drm_info
 
     def get_best_url(self) -> Optional[str]:
         """
