@@ -17,7 +17,7 @@ import json
 import shutil
 import platform
 import re
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 from dataclasses import dataclass, field
 
 
@@ -372,7 +372,7 @@ def detect_available_browsers() -> Dict[str, Optional[str]]:
 # Integração com Playwright: construção dos kwargs de contexto/lançamento
 # ---------------------------------------------------------------------------
 
-def build_playwright_launch_kwargs(profile: BrowserProfile) -> Dict:
+def build_playwright_launch_kwargs(profile: Optional[BrowserProfile], headless: bool) -> Dict[str, Any]:
     """
     Constrói os argumentos necessários para lançar o Playwright com um perfil
     existente do navegador, reutilizando cookies e sessões salvas.
@@ -391,6 +391,9 @@ def build_playwright_launch_kwargs(profile: BrowserProfile) -> Dict:
         - "user_data_dir": diretório de dados (para persistent_context)
         - "browser_type": "chromium" | "firefox"
     """
+    if not profile:
+        return {"headless": headless}
+
     browser = profile.browser.lower()
 
     # Mapeamento para os canais suportados pelo Playwright
