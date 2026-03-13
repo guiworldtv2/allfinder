@@ -342,7 +342,7 @@ class M3U8Extractor:
             }
 
         self._profile = self._resolve_profile()
-        launch_kwargs = build_playwright_launch_kwargs(self._profile, self.headless)
+        launch_kwargs = build_playwright_launch_kwargs(self._profile)
 
         async with async_playwright() as p:
             browser_instance = p[self.browser_name]
