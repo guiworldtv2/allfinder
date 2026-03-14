@@ -211,7 +211,7 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     async def _handle_request(self, request: Request):
-        """Callback legado para o evento \'request\'. Delega para o NetworkCapture."""
+        """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
         self._capture._process_url(request.url)
         self.found_urls = self._capture.get_urls()
         await self._handle_drm_request(request)
@@ -226,24 +226,24 @@ class M3U8Extractor:
         try:
             # Tenta aceitar cookies ou fechar popups
             await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
-            print("[*] Clicou em \'Aceitar\' cookies.")
+            print("[*] Clicou em 'Aceitar' cookies.")
         except Exception:
             pass
         try:
             await page.locator("text=Concordar", has_text="Concordar").click(timeout=2000)
-            print("[*] Clicou em \'Concordar\' cookies.")
+            print("[*] Clicou em 'Concordar' cookies.")
         except Exception:
             pass
         try:
-            await page.locator("button:has-text(\'Entendi\')").click(timeout=2000)
-            print("[*] Clicou em \'Entendi\' (popup).")
+            await page.locator("button:has-text('Entendi')").click(timeout=2000)
+            print("[*] Clicou em 'Entendi' (popup).")
         except Exception:
             pass
 
         # Tenta clicar em botões de play genéricos
         play_selectors = [
-            "button[aria-label=\'Play\']",
-            "button[title=\'Play\']",
+            "button[aria-label='Play']",
+            "button[title='Play']",
             ".vjs-big-play-button",
             ".jw-icon-playback",
             ".play-button",
@@ -285,14 +285,14 @@ class M3U8Extractor:
             metadata = await page.evaluate("""() => {
                 const getMeta = (name) => {
                     const el = document.querySelector(
-                        `meta[property=\"${name}\"], meta[name=\"${name}\"],
-                         meta[property=\"og:${name}\"], meta[name=\"${name}\"]`
+                        `meta[property="${name}"], meta[name="${name}"],
+                         meta[property="og:${name}"], meta[name="${name}"]`
                     );
-                    return el ? el.getAttribute(\'content\') : null;
+                    return el ? el.getAttribute('content') : null;
                 };
                 const titleSelectors = [
-                    \'h1.video-title\', \'h1.LiveVideo__Title\', \'h1.video-info__title\',
-                    \'.VideoInfo__Title\', \'.video-title-container h1\', \'.headline\', \'h1\'
+                    'h1.video-title', 'h1.LiveVideo__Title', 'h1.video-info__title',
+                    '.VideoInfo__Title', '.video-title-container h1', '.headline', 'h1'
                 ];
                 let foundTitle = null;
                 for (const sel of titleSelectors) {
@@ -301,13 +301,13 @@ class M3U8Extractor:
                         foundTitle = el.innerText.trim();
                     }
                 }
-                const metaTitle = getMeta(\'title\') || getMeta(\'og:title\') || getMeta(\'twitter:title\');
+                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
                 return {
                     title: foundTitle || metaTitle || document.title,
-                    og_image: getMeta(\'og:image\'),
-                    twitter_image: getMeta(\'twitter:image\'),
-                    poster: document.querySelector(\'video\')
-                        ? document.querySelector(\'video\').getAttribute(\'poster\')
+                    og_image: getMeta('og:image'),
+                    twitter_image: getMeta('twitter:image'),
+                    poster: document.querySelector('video')
+                        ? document.querySelector('video').getAttribute('poster')
                         : null
                 };
             }""")
@@ -378,14 +378,10 @@ class M3U8Extractor:
             page.on("request", self._handle_request)
 
             try:
-                print(f"[*] Navegando para: {url} (aguardando networkidle)...")
+                print(f"[*] Navegando para: {url}...")
                 print(f"[*] Timeout configurado para page.goto: {self.timeout}ms")
-                await page.goto(url, timeout=self.timeout, wait_until="networkidle")
-                print("[*] Navegação concluída. Tentando interagir com a página...")
-
-                # Interage com a página para carregar conteúdo dinâmico
-                await self._interact_with_page(page)
-
+                await page.goto(url, timeout=self.timeout)
+                print("[*] Navegação concluída.")
 
                 # Lógica de interação do plugin
                 if plugin and hasattr(plugin, 'interact'):
