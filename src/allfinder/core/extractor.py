@@ -23,7 +23,7 @@ import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
 
 import validators
-from crawl4ai import Crawl4AI
+from crawl4ai import AsyncWebCrawler as Crawl4AI
 from playwright.async_api import (
     Browser,
     BrowserContext,
