@@ -211,7 +211,7 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     async def _handle_request(self, request: Request):
-        """Callback legado para o evento \'request\'. Delega para o NetworkCapture."""
+        """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
         self._capture._process_url(request.url)
         self.found_urls = self._capture.get_urls()
         await self._handle_drm_request(request)
@@ -219,8 +219,6 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
     # Extração de metadados da página
     # -----------------------------------------------------------------------
-
-
 
     async def _update_metadata(self, page: Page):
         """Extrai título e thumbnail da página via JavaScript injetado."""
@@ -231,11 +229,11 @@ class M3U8Extractor:
                         `meta[property="${name}"], meta[name="${name}"],
                          meta[property="og:${name}"], meta[name="${name}"]`
                     );
-                    return el ? el.getAttribute(\'content\') : null;
+                    return el ? el.getAttribute('content') : null;
                 };
                 const titleSelectors = [
-                    \'h1.video-title\', \'h1.LiveVideo__Title\', \'h1.video-info__title\',
-                    \'.VideoInfo__Title\', \'.video-title-container h1\', \'.headline\', \'h1\'
+                    'h1.video-title', 'h1.LiveVideo__Title', 'h1.video-info__title',
+                    '.VideoInfo__Title', '.video-title-container h1', '.headline', 'h1'
                 ];
                 let foundTitle = null;
                 for (const sel of titleSelectors) {
@@ -244,13 +242,13 @@ class M3U8Extractor:
                         foundTitle = el.innerText.trim();
                     }
                 }
-                const metaTitle = getMeta(\'title\') || getMeta(\'og:title\') || getMeta(\'twitter:title\');
+                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
                 return {
                     title: foundTitle || metaTitle || document.title,
-                    og_image: getMeta(\'og:image\'),
-                    twitter_image: getMeta(\'twitter:image\'),
-                    poster: document.querySelector(\'video\')
-                        ? document.querySelector(\'video\').getAttribute(\'poster\')
+                    og_image: getMeta('og:image'),
+                    twitter_image: getMeta('twitter:image'),
+                    poster: document.querySelector('video')
+                        ? document.querySelector('video').getAttribute('poster')
                         : null
                 };
             }""")
