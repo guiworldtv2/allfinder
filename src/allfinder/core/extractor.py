@@ -494,25 +494,25 @@ class M3U8Extractor:
         print("[!] Captura de rede não encontrou URLs de mídia ou DRM. Tentando Crawl4AI...")
         try:
             crawl4ai = Crawl4AI()
-            result = await crawl4ai.acrawl(url)
+            result = await crawl4ai.arun(url=url)
 
             found_urls = []
             drm_info = None
 
-            if result and result.get("media_urls"):
-                for media_url in result["media_urls"]:
+            if result and result.media_urls:
+                for media_url in result.media_urls:
                     if ".m3u8" in media_url or ".mpd" in media_url:
                         found_urls.append(media_url)
                 if found_urls:
                     print(f"[*] Crawl4AI encontrou {len(found_urls)} URLs de mídia.")
 
-            if result and result.get("drm_info"):
+            if result and result.drm_info:
                 # Adapta o formato do Crawl4AI para o DRMInfo do allfinder
-                c4ai_drm = result["drm_info"]
+                c4ai_drm = result.drm_info
                 drm_info = DRMInfo(
-                    license_url=c4ai_drm.get("license_url"),
-                    pssh=c4ai_drm.get("pssh"),
-                    kid=c4ai_drm.get("kid"),
+                    license_url=c4ai_drm.license_url,
+                    pssh=c4ai_drm.pssh,
+                    kid=c4ai_drm.kid,
                 )
                 if drm_info.license_url or drm_info.pssh or drm_info.kid:
                     print("[*] Crawl4AI encontrou informações de DRM.")
