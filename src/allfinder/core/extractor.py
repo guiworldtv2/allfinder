@@ -211,7 +211,7 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     async def _handle_request(self, request: Request):
-        """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
+        """Callback legado para o evento \'request\'. Delega para o NetworkCapture."""
         self._capture._process_url(request.url)
         self.found_urls = self._capture.get_urls()
         await self._handle_drm_request(request)
@@ -223,31 +223,27 @@ class M3U8Extractor:
     async def _interact_with_page(self, page: Page):
         """Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."""
         print("[*] Tentando interagir com a página...")
-        print(f"[*] URL atual antes da interação: {page.url}")
         try:
             # Tenta aceitar cookies ou fechar popups
             await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
-            print("[*] Clicou em 'Aceitar' cookies.")
-            print("[*] Tentando clicar em outros botões de aceitar cookies/popups...")
+            print("[*] Clicou em \'Aceitar\' cookies.")
         except Exception:
             pass
         try:
             await page.locator("text=Concordar", has_text="Concordar").click(timeout=2000)
-            print("[*] Clicou em 'Concordar' cookies.")
-            print("[*] Tentando clicar em outros botões de aceitar cookies/popups...")
+            print("[*] Clicou em \'Concordar\' cookies.")
         except Exception:
             pass
         try:
-            await page.locator("button:has-text('Entendi')").click(timeout=2000)
-            print("[*] Clicou em 'Entendi' (popup).")
-            print("[*] Tentando clicar em botões de play genéricos...")
+            await page.locator("button:has-text(\'Entendi\')").click(timeout=2000)
+            print("[*] Clicou em \'Entendi\' (popup).")
         except Exception:
             pass
 
         # Tenta clicar em botões de play genéricos
         play_selectors = [
-            "button[aria-label='Play']",
-            "button[title='Play']",
+            "button[aria-label=\'Play\']",
+            "button[title=\'Play\']",
             ".vjs-big-play-button",
             ".jw-icon-playback",
             ".play-button",
@@ -258,7 +254,6 @@ class M3U8Extractor:
             try:
                 await page.locator(selector).click(timeout=2000)
                 print(f"[*] Clicou no botão de play: {selector}")
-                print("[*] Botão de play clicado. Aguardando player iniciar...")
                 await asyncio.sleep(1) # Pequena pausa para o player iniciar
                 break
             except Exception:
@@ -283,7 +278,6 @@ class M3U8Extractor:
         await asyncio.sleep(3) # Aumenta o tempo de espera para captura de tokens/DRM
 
         print("[*] Interação com a página concluída.")
-        print(f"[*] Fim da interação com a página. Título atual: {self.page_title}")
 
     async def _update_metadata(self, page: Page):
         """Extrai título e thumbnail da página via JavaScript injetado."""
@@ -291,14 +285,14 @@ class M3U8Extractor:
             metadata = await page.evaluate("""() => {
                 const getMeta = (name) => {
                     const el = document.querySelector(
-                        `meta[property="${name}"], meta[name="${name}"],
-                         meta[property="og:${name}"], meta[name="twitter:${name}"]`
+                        `meta[property=\"${name}\"], meta[name=\"${name}\"],
+                         meta[property=\"og:${name}\"], meta[name=\"twitter:${name}\"]`
                     );
-                    return el ? el.getAttribute('content') : null;
+                    return el ? el.getAttribute(\'content\') : null;
                 };
                 const titleSelectors = [
-                    'h1.video-title', 'h1.LiveVideo__Title', 'h1.video-info__title',
-                    '.VideoInfo__Title', '.video-title-container h1', '.headline', 'h1'
+                    \'h1.video-title\', \'h1.LiveVideo__Title\', \'h1.video-info__title\',
+                    \'.VideoInfo__Title\', \'.video-title-container h1\', \'.headline\', \'h1\'
                 ];
                 let foundTitle = null;
                 for (const sel of titleSelectors) {
@@ -307,13 +301,13 @@ class M3U8Extractor:
                         foundTitle = el.innerText.trim();
                     }
                 }
-                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
+                const metaTitle = getMeta(\'title\') || getMeta(\'og:title\') || getMeta(\'twitter:title\');
                 return {
                     title: foundTitle || metaTitle || document.title,
-                    og_image: getMeta('og:image'),
-                    twitter_image: getMeta('twitter:image'),
-                    poster: document.querySelector('video')
-                        ? document.querySelector('video').getAttribute('poster')
+                    og_image: getMeta(\'og:image\'),
+                    twitter_image: getMeta(\'twitter:image\'),
+                    poster: document.querySelector(\'video\')
+                        ? document.querySelector(\'video\').getAttribute(\'poster\')
                         : null
                 };
             }""")
@@ -377,7 +371,7 @@ class M3U8Extractor:
 
             # Mascaramento de automação
             await page.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                "Object.defineProperty(navigator, \'webdriver\', {get: () => undefined});"
             )
 
             # Captura de rede
@@ -388,25 +382,21 @@ class M3U8Extractor:
                 print(f"[*] Timeout configurado para page.goto: {self.timeout}ms")
                 await page.goto(url, timeout=self.timeout, wait_until="networkidle")
                 print("[*] Navegação concluída. Tentando interagir com a página...")
-                print(f"[*] Início da interação com a página: {self.page_title}")
 
                 # Interage com a página para carregar conteúdo dinâmico
                 await self._interact_with_page(page)
 
 
                 # Lógica de interação do plugin
-                if plugin and hasattr(plugin, 'interact'):
+                if plugin and hasattr(plugin, \'interact\'):
                     await plugin.interact(page)
 
                 # Loop de espera e atualização de metadados
-                for i in range(int(self.timeout / 2000)):
-                    print(f"[*] Loop de espera e atualização de metadados: Iteração {i+1}")
+                for _ in range(int(self.timeout / 2000)):
                     await self._update_metadata(page)
                     if self._capture.has_urls():
-                        print(f"[*] URLs encontradas na iteração {i+1}. Quebrando loop.")
                         break
                     await asyncio.sleep(2)
-                    print(f"[*] Aguardando 2 segundos na iteração {i+1}.")
 
             except Exception as e:
                 print(f"\n[!] Erro durante a navegação/interação: {e}")
@@ -542,7 +532,7 @@ class M3U8Extractor:
         if self.cookies_from_browser:
             try:
                 from browser_cookie3 import load
-                domain = urllib.parse.urlparse(self.found_urls[0]).netloc if self.found_urls else ''
+                domain = urllib.parse.urlparse(self.found_urls[0]).netloc if self.found_urls else \'\'
                 cj = load(self.cookies_from_browser, domain_name=domain)
                 for cookie in cj:
                     cookies.append({
@@ -555,7 +545,7 @@ class M3U8Extractor:
                         "secure": cookie.secure,
                     })
             except ImportError:
-                print("[!] Para usar --cookies-from-browser, instale 'browser-cookie3'.")
+                print("[!] Para usar --cookies-from-browser, instale \'browser-cookie3\'.")
             except Exception as e:
                 print(f"[!] Erro ao carregar cookies do navegador: {e}")
 
