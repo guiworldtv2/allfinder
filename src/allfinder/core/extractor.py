@@ -378,14 +378,10 @@ class M3U8Extractor:
             page.on("request", self._handle_request)
 
             try:
-                print(f"[*] Navegando para: {url} (aguardando networkidle)...")
+                print(f"[*] Navegando para: {url}...")
                 print(f"[*] Timeout configurado para page.goto: {self.timeout}ms")
-                await page.goto(url, timeout=self.timeout, wait_until="networkidle")
-                print("[*] Navegação concluída. Tentando interagir com a página...")
-
-                # Interage com a página para carregar conteúdo dinâmico
-                await self._interact_with_page(page)
-
+                await page.goto(url, timeout=self.timeout)
+                print("[*] Navegação concluída.")
 
                 # Lógica de interação do plugin
                 if plugin and hasattr(plugin, 'interact'):
