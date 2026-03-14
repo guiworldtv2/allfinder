@@ -22,6 +22,7 @@ import urllib.parse
 from typing import Any, Callable, Dict, List, Optional
 
 import validators
+from crawl4ai import Crawl4AI
 from playwright.async_api import (
     Browser,
     BrowserContext,
@@ -402,6 +403,14 @@ class M3U8Extractor:
 
                 await browser.close()
 
+        # Lógica de fallback com Crawl4AI
+        if not self.found_urls and not self._capture.get_drm_info():
+            crawl4ai_result = await self._run_crawl4ai_fallback(url)
+            if crawl4ai_result["urls"]:
+                self.found_urls.extend(crawl4ai_result["urls"])
+            if crawl4ai_result["drm_info"]:
+                self._capture._drm_info = crawl4ai_result["drm_info"]
+
         return {
             "urls": self.found_urls,
             "title": self.page_title,
@@ -462,6 +471,43 @@ class M3U8Extractor:
                 self._capture._drm_info = DRMInfo()
             self._capture._drm_info.kid = kid_match.group(1)
 
+    async def _run_crawl4ai_fallback(self, url: str) -> Dict[str, Any]:
+        """
+        Executa o Crawl4AI como fallback para extrair informações da página
+        quando a captura de rede padrão não encontra nada.
+        """
+        print("[!] Captura de rede não encontrou URLs de mídia ou DRM. Tentando Crawl4AI...")
+        try:
+            crawl4ai = Crawl4AI()
+            result = await crawl4ai.extract(url)
+
+            found_urls = []
+            drm_info = None
+
+            if result and result.get("media_urls"):
+                for media_url in result["media_urls"]:
+                    if ".m3u8" in media_url or ".mpd" in media_url:
+                        found_urls.append(media_url)
+                if found_urls:
+                    print(f"[*] Crawl4AI encontrou {len(found_urls)} URLs de mídia.")
+
+            if result and result.get("drm_info"):
+                # Adapta o formato do Crawl4AI para o DRMInfo do allfinder
+                c4ai_drm = result["drm_info"]
+                drm_info = DRMInfo(
+                    license_url=c4ai_drm.get("license_url"),
+                    pssh=c4ai_drm.get("pssh"),
+                    kid=c4ai_drm.get("kid"),
+                )
+                if drm_info.license_url or drm_info.pssh or drm_info.kid:
+                    print("[*] Crawl4AI encontrou informações de DRM.")
+
+            return {"urls": found_urls, "drm_info": drm_info}
+
+        except Exception as e:
+            print(f"[!] Erro ao executar Crawl4AI: {e}")
+            return {"urls": [], "drm_info": None}
+
     async def _create_browser_context(self, browser: Browser) -> BrowserContext:
         """Cria um contexto de navegador com cookies e perfil, se aplicável."""
         context_kwargs = {}
@@ -502,3 +548,4 @@ class M3U8Extractor:
             await context.add_cookies(cookies)
 
         return context
+    async def _create_browser_context(self, browser: Browser) -> BrowserContext:

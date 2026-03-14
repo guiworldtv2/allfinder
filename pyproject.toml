@@ -12,6 +12,7 @@ dependencies = [
     "playwright>=1.41.0",
     "rich>=13.0.0",
     "validators>=0.22.0",
+    "crawl4ai>=0.1.0",
 ]
 
 [project.scripts]
