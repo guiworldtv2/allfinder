@@ -45,7 +45,7 @@ from allfinder.core.network_capture import NetworkCapture, DRMInfo
 # Classe principal: M3U8Extractor
 # ---------------------------------------------------------------------------
 
-class M3U8Extractor:
+clclass M3U8Extractor:
     """
     Extrator de URLs de mídia (M3U8/MPD) via automação de navegador.
 
@@ -109,7 +109,7 @@ class M3U8Extractor:
             return False
         if not url.lower().startswith(("http://", "https://")):
             return False
-        parsed_url = re.search(r"https?://([^/]+)", url)
+        parsed_url = re.search(r"https?://([^/]+)", url):
         if parsed_url:
             host = parsed_url.group(1).lower()
             if any(x in host for x in ["localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.", "172.16."]):
@@ -120,7 +120,7 @@ class M3U8Extractor:
     # Resolução de perfil de navegador
     # -----------------------------------------------------------------------
 
-    def _resolve_profile(self) -> Optional[BrowserProfile]:
+       def _resolve_profile(self) -> Optional[BrowserProfile]:
         """
         Detecta e retorna o perfil de navegador a ser usado.
         Retorna None se use_profile=False ou se nenhum perfil for encontrado.
@@ -135,7 +135,7 @@ class M3U8Extractor:
             print(
                 f"[!] Perfil \'{self.profile_name}\' não encontrado para {self.browser_name}. "
                 "Usando navegador sem perfil."
-            )
+            ): )
         return profile
 
     # -----------------------------------------------------------------------
@@ -190,12 +190,10 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
     # Limpeza de URLs com redirecionamento embutido (legado)
     # -----------------------------------------------------------------------
-
     def _clean_url(self, url: str) -> str:
         """Extrai a URL real se estiver embutida em parâmetros de rastreamento."""
         try:
-            parsed = urllib.parse.urlparse(url)
-            params = urllib.parse.parse_qs(parsed.query)
+            parsed = urllib.parse.urlparse(url):           params = urllib.parse.parse_qs(parsed.query)
             url_params = ["ep.URL", "url", "link", "target", "redir"]
             for param in url_params:
                 if param in params:
@@ -210,9 +208,9 @@ class M3U8Extractor:
     # Handler de requisições (mantido para compatibilidade com plugins)
     # -----------------------------------------------------------------------
 
-    async def _handle_request(self, request: Request):
+     async def _handle_request(self, request: Request):
         """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
-        self._capture._process_url(request.url)
+        self._capture._process_url(request.url):.url)
         self.found_urls = self._capture.get_urls()
         await self._handle_drm_request(request)
 
