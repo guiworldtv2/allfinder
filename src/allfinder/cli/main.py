@@ -1,3 +1,4 @@
+
 """
 cli/main.py
 ===========
@@ -41,8 +42,9 @@ async def process_url(
         return {
             "source_url": url,
             "title": data["title"],
-            "m3u8_urls": data["urls"],
+            "urls": data["urls"],
             "thumbnail": data["thumbnail"],
+            "drm_info": data["drm_info"],
         }
     except Exception as e:
         progress.update(task_id, completed=True, description=f"[red]Erro: {url}")
@@ -50,8 +52,9 @@ async def process_url(
         return {
             "source_url": url,
             "title": "Erro",
-            "m3u8_urls": [],
+            "urls": [],
             "thumbnail": None,
+            "drm_info": None,
         }
 
 
@@ -217,8 +220,8 @@ Exemplos de uso:
                 continue
             console.print(f"\n[bold]Título:[/] {res['title']}")
             console.print(f"[bold]Thumbnail:[/] {res['thumbnail'] or 'Não encontrada'}")
-            if res["m3u8_urls"]:
-                for u in res["m3u8_urls"]:
+            if res["urls"]:
+                for u in res["urls"]:
                     console.print(f"  [green]- {u}[/]")
             else:
                 console.print("  [red][-] Nenhum link m3u8 encontrado.[/]")
