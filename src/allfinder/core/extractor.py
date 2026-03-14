@@ -1,3 +1,4 @@
+
 """
 extractor.py
 ============
@@ -258,8 +259,7 @@ class M3U8Extractor:
             except Exception:
                 pass
 
-        # Rola a página para garantir que elementos dinâmicos sejam carregados
-        # Simula rolagem para baixo e para cima para carregar conteúdo lazy-loaded
+        # Rola a página para simular interação e carregar conteúdo lazy-loaded
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await asyncio.sleep(2) # Espera um pouco para o conteúdo carregar
         await page.evaluate("window.scrollTo(0, 0)")
@@ -299,7 +299,9 @@ class M3U8Extractor:
                     const el = document.querySelector(sel);
                     if (el && el.innerText.trim().length > 5) {
                         foundTitle = el.innerText.trim();
-         const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
+                    }
+                }
+                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
                 return {
                     title: foundTitle || metaTitle || document.title,
                     og_image: getMeta('og:image'),
@@ -385,7 +387,7 @@ class M3U8Extractor:
 
 
                 # Lógica de interação do plugin
-                if plugin:
+                if plugin and hasattr(plugin, 'interact'):
                     await plugin.interact(page)
 
                 # Loop de espera e atualização de metadados
@@ -549,4 +551,3 @@ class M3U8Extractor:
             await context.add_cookies(cookies)
 
         return context
-    async def _create_browser_context(self, browser: Browser) -> BrowserContext:
