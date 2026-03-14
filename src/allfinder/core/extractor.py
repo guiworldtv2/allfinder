@@ -324,16 +324,8 @@ class M3U8Extractor:
                 await page.goto(url, timeout=self.timeout)
                 print("[*] Navegação concluída.")
 
-                # Lógica de interação do plugin
-                if plugin and hasattr(plugin, 'interact'):
-                    await plugin.interact(page)
-
-                # Loop de espera e atualização de metadados
-                for _ in range(int(self.timeout / 2000)):
-                    await self._update_metadata(page)
-                    if self._capture.get_urls():
-                        break
-                    await asyncio.sleep(2)
+                # Lógica de interação do plugin e loop de espera de metadados removidos para depuração
+                # O Crawl4AI será chamado como fallback se nenhuma URL for encontrada após a navegação inicial.
 
             except Exception as e:
                 print(f"\n[!] Erro durante a navegação/interação: {e}")
@@ -427,12 +419,12 @@ class M3U8Extractor:
             drm_info = None
 
             if result and result.media:
-                for video in result.media.videos:
-                    if video.src and (".m3u8" in video.src or ".mpd" in video.src):
-                        found_urls.append(video.src)
-                for audio in result.media.audios:
-                    if audio.src and (".m3u8" in audio.src or ".mpd" in audio.src):
-                        found_urls.append(audio.src)
+                for video in result.media.get("videos", []):
+                    if video.get("src") and (".m3u8" in video.get("src") or ".mpd" in video.get("src")):
+                        found_urls.append(video.get("src"))
+                for audio in result.media.get("audios", []):
+                    if audio.get("src") and (".m3u8" in audio.get("src") or ".mpd" in audio.get("src")):
+                        found_urls.append(audio.get("src"))
                 if found_urls:
                     print(f"[*] Crawl4AI encontrou {len(found_urls)} URLs de mídia.")
 
@@ -440,9 +432,9 @@ class M3U8Extractor:
                 # Adapta o formato do Crawl4AI para o DRMInfo do allfinder
                 c4ai_drm = result.drm_info
                 drm_info = DRMInfo(
-                    license_url=c4ai_drm.license_url,
-                    pssh=c4ai_drm.pssh,
-                    kid=c4ai_drm.kid,
+                    license_url=c4ai_drm.get("license_url"),
+                    pssh=c4ai_drm.get("pssh"),
+                    kid=c4ai_drm.get("kid"),
                 )
                 if drm_info.license_url or drm_info.pssh or drm_info.kid:
                     print("[*] Crawl4AI encontrou informações de DRM.")
