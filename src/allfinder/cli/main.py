@@ -41,7 +41,7 @@ async def process_url(
         return {
             "source_url": url,
             "title": data["title"],
-            "m3u8_urls": data["m3u8_urls"],
+            "m3u8_urls": data["urls"],
             "thumbnail": data["thumbnail"],
         }
     except Exception as e:
@@ -196,10 +196,10 @@ Exemplos de uso:
         with open(args.output, "w", encoding="utf-8") as f:
             f.write("#EXTM3U\n")
             for res in results:
-                if res["m3u8_urls"]:
+                if res["urls"]:
                     main_url = next(
-                        (u for u in res["m3u8_urls"] if "playlist.m3u8" in u.lower()),
-                        res["m3u8_urls"][0],
+                        (u for u in res["urls"] if "playlist.m3u8" in u.lower()),
+                        res["urls"][0],
                     )
                     logo = f' tvg-logo="{res["thumbnail"]}"' if res["thumbnail"] else ""
                     display_title = (
