@@ -1,4 +1,5 @@
-'''
+
+"""
 extractor.py
 ============
 Módulo principal de extração de URLs de mídia (M3U8/MPD) via automação de
@@ -12,7 +13,7 @@ Melhorias em relação à versão anterior:
 - Suporte a contexto persistente do Playwright para reutilização de sessão.
 - Mascaramento de automação (--disable-blink-features=AutomationControlled).
 - Compatibilidade total com o fluxo anterior (cookies, yt-dlp, plugins).
-'''
+"""
 
 import asyncio
 import json
@@ -45,7 +46,7 @@ from allfinder.core.network_capture import NetworkCapture, DRMInfo
 # ---------------------------------------------------------------------------
 
 class M3U8Extractor:
-    '''
+    """
     Extrator de URLs de mídia (M3U8/MPD) via automação de navegador.
 
     Parâmetros
@@ -67,7 +68,7 @@ class M3U8Extractor:
     use_profile : bool
         Se True, reutiliza um perfil existente do navegador para acessar sites
         que exigem login sem precisar autenticar novamente.
-    '''
+    """
 
     def __init__(
         self,
@@ -103,7 +104,7 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     def validate_url(self, url: str) -> bool:
-        "'''Valida se a URL é segura e bem formatada."'''
+        """Valida se a URL é segura e bem formatada."""
         if not validators.url(url):
             return False
         if not url.lower().startswith(("http://", "https://")):
@@ -120,10 +121,10 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     def _resolve_profile(self) -> Optional[BrowserProfile]:
-        '''
+        """
         Detecta e retorna o perfil de navegador a ser usado.
         Retorna None se use_profile=False ou se nenhum perfil for encontrado.
-        '''
+        """
         if not self.use_profile:
             return None
 
@@ -142,7 +143,7 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     def _parse_cookies_file(self) -> List[Dict[str, Any]]:
-        "'''Lê cookies de arquivos .json ou .txt (formato Netscape) e limpa campos inválidos."'''
+        """Lê cookies de arquivos .json ou .txt (formato Netscape) e limpa campos inválidos."""
         if not self.cookies_file or not os.path.exists(self.cookies_file):
             return []
         cookies = []
@@ -191,7 +192,7 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     def _clean_url(self, url: str) -> str:
-        "'''Extrai a URL real se estiver embutida em parâmetros de rastreamento."'''
+        """Extrai a URL real se estiver embutida em parâmetros de rastreamento."""
         try:
             parsed = urllib.parse.urlparse(url)
             params = urllib.parse.parse_qs(parsed.query)
@@ -210,7 +211,7 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     async def _handle_request(self, request: Request):
-        "'''Callback legado para o evento \'request\'. Delega para o NetworkCapture."'''
+        """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
         self._capture._process_url(request.url)
         self.found_urls = self._capture.get_urls()
         await self._handle_drm_request(request)
@@ -220,29 +221,29 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     async def _interact_with_page(self, page: Page):
-        "'''Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."'''
+        """Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."""
         print("[*] Tentando interagir com a página...")
         try:
             # Tenta aceitar cookies ou fechar popups
             await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
-            print("[*] Clicou em \'Aceitar\' cookies.")
+            print("[*] Clicou em 'Aceitar' cookies.")
         except Exception:
             pass
         try:
             await page.locator("text=Concordar", has_text="Concordar").click(timeout=2000)
-            print("[*] Clicou em \'Concordar\' cookies.")
+            print("[*] Clicou em 'Concordar' cookies.")
         except Exception:
             pass
         try:
-            await page.locator("button:has-text(\'Entendi\')").click(timeout=2000)
-            print("[*] Clicou em \'Entendi\' (popup).")
+            await page.locator("button:has-text('Entendi')").click(timeout=2000)
+            print("[*] Clicou em 'Entendi' (popup).")
         except Exception:
             pass
 
         # Tenta clicar em botões de play genéricos
         play_selectors = [
-            "button[aria-label=\'Play\']",
-            "button[title=\'Play\']",
+            "button[aria-label='Play']",
+            "button[title='Play']",
             ".vjs-big-play-button",
             ".jw-icon-playback",
             ".play-button",
@@ -279,19 +280,19 @@ class M3U8Extractor:
         print("[*] Interação com a página concluída.")
 
     async def _update_metadata(self, page: Page):
-        "'''Extrai título e thumbnail da página via JavaScript injetado."'''
+        """Extrai título e thumbnail da página via JavaScript injetado."""
         try:
-            metadata = await page.evaluate('''() => {
+            metadata = await page.evaluate("""() => {
                 const getMeta = (name) => {
                     const el = document.querySelector(
                         `meta[property="${name}"], meta[name="${name}"],
                          meta[property="og:${name}"], meta[name="${name}"]`
                     );
-                    return el ? el.getAttribute(\'content\') : null;
+                    return el ? el.getAttribute('content') : null;
                 };
                 const titleSelectors = [
-                    \'h1.video-title\', \'h1.LiveVideo__Title\', \'h1.video-info__title\',
-                    \'.VideoInfo__Title\', \'.video-title-container h1\', \'.headline\', \'h1\'
+                    'h1.video-title', 'h1.LiveVideo__Title', 'h1.video-info__title',
+                    '.VideoInfo__Title', '.video-title-container h1', '.headline', 'h1'
                 ];
                 let foundTitle = null;
                 for (const sel of titleSelectors) {
@@ -300,16 +301,16 @@ class M3U8Extractor:
                         foundTitle = el.innerText.trim();
                     }
                 }
-                const metaTitle = getMeta(\'title\') || getMeta(\'og:title\') || getMeta(\'twitter:title\');
+                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
                 return {
                     title: foundTitle || metaTitle || document.title,
-                    og_image: getMeta(\'og:image\'),
-                    twitter_image: getMeta(\'twitter:image\'),
-                    poster: document.querySelector(\'video\')
-                        ? document.querySelector(\'video\').getAttribute(\'poster\')
+                    og_image: getMeta('og:image'),
+                    twitter_image: getMeta('twitter:image'),
+                    poster: document.querySelector('video')
+                        ? document.querySelector('video').getAttribute('poster')
                         : null
                 };
-            }''')
+            }""")
 
             if metadata:
                 if metadata.get("title"):
@@ -330,11 +331,11 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     async def extract(self, url: str, plugin: Any) -> Dict[str, Any]:
-        '''
+        """
         Executa a extração de mídia para uma única URL.
 
         Retorna um dicionário com as URLs encontradas, título e thumbnail.
-        '''
+        """
         if not self.validate_url(url):
             return {
                 "urls": [],
@@ -370,7 +371,7 @@ class M3U8Extractor:
 
             # Mascaramento de automação
             await page.add_init_script(
-                'Object.defineProperty(navigator, \'webdriver\', {get: () => undefined});'
+                'Object.defineProperty(navigator, "webdriver", {get: () => undefined});'
             )
 
             # Captura de rede
@@ -423,7 +424,7 @@ class M3U8Extractor:
         }
 
     async def _handle_drm_request(self, request: Request):
-        "'''Processa requisições de DRM para extrair license_url, PSSH e KID."'''
+        """Processa requisições de DRM para extrair license_url, PSSH e KID."""
         # Widevine
         if "widevine" in request.url and request.method == "POST":
             try:
@@ -476,10 +477,10 @@ class M3U8Extractor:
             self._capture._drm_info.kid = kid_match.group(1)
 
     async def _run_crawl4ai_fallback(self, url: str) -> Dict[str, Any]:
-        '''
+        """
         Executa o Crawl4AI como fallback para extrair informações da página
         quando a captura de rede padrão não encontra nada.
-        '''
+        """
         print("[!] Captura de rede não encontrou URLs de mídia ou DRM. Tentando Crawl4AI...")
         try:
             crawl4ai = Crawl4AI()
@@ -516,7 +517,7 @@ class M3U8Extractor:
             return {"urls": [], "drm_info": None}
 
     async def _create_browser_context(self, browser: Browser) -> BrowserContext:
-        "'''Cria um contexto de navegador com cookies e perfil, se aplicável."'''
+        """Cria um contexto de navegador com cookies e perfil, se aplicável."""
         context_kwargs = {}
         if self._profile and self._profile.user_data_dir:
             # Lança um contexto persistente se um perfil for usado
@@ -547,7 +548,7 @@ class M3U8Extractor:
                         "secure": cookie.secure,
                     })
             except ImportError:
-                print("[!] Para usar --cookies-from-browser, instale \'browser-cookie3\'.")
+                print("[!] Para usar --cookies-from-browser, instale 'browser-cookie3'.")
             except Exception as e:
                 print(f"[!] Erro ao carregar cookies do navegador: {e}")
 
