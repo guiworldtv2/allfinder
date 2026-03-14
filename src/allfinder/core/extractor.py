@@ -278,6 +278,7 @@ class M3U8Extractor:
         await asyncio.sleep(3) # Aumenta o tempo de espera para captura de tokens/DRM
 
         print("[*] Interação com a página concluída.")
+        print(f"[*] Fim da interação com a página. Título atual: {self.page_title}")
 
     async def _update_metadata(self, page: Page):
         """Extrai título e thumbnail da página via JavaScript injetado."""
@@ -379,8 +380,10 @@ class M3U8Extractor:
 
             try:
                 print(f"[*] Navegando para: {url} (aguardando networkidle)...")
+                print(f"[*] Timeout configurado para page.goto: {self.timeout}ms")
                 await page.goto(url, timeout=self.timeout, wait_until="networkidle")
                 print("[*] Navegação concluída. Tentando interagir com a página...")
+                print(f"[*] Início da interação com a página: {self.page_title}")
 
                 # Interage com a página para carregar conteúdo dinâmico
                 await self._interact_with_page(page)
@@ -399,6 +402,7 @@ class M3U8Extractor:
 
             except Exception as e:
                 print(f"\n[!] Erro durante a navegação/interação: {e}")
+                print("[!] Tentando fallback com Crawl4AI devido a erro na navegação/interação.")
 
             finally:
                 self.found_urls = self._capture.get_urls()
