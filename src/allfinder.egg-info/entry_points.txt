@@ -1,2 +1,0 @@
-[console_scripts]
-allfinder = allfinder.cli.main:main_entry
