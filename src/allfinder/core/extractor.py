@@ -381,7 +381,7 @@ class M3U8Extractor:
             try:
                 print(f"[*] Navegando para: {url} (aguardando networkidle)...")
                 print(f"[*] Timeout configurado para page.goto: {self.timeout}ms")
-                await page.goto(url, timeout=self.timeout, wait_until="networkidle")
+                await page.goto(url, timeout=self.timeout)
                 print("[*] Navegação concluída. Tentando interagir com a página...")
                 print(f"[*] Início da interação com a página: {self.page_title}")
 
