@@ -1,0 +1,83 @@
+Metadata-Version: 2.4
+Name: allfinder
+Version: 0.2.4
+Summary: Uma ferramenta para extrair URLs .m3u8 de sites de streaming via automação de navegador.
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: playwright>=1.41.0
+Requires-Dist: rich>=13.0.0
+Requires-Dist: validators>=0.22.0
+
+# allfinder
+
+**allfinder** é uma ferramenta poderosa para extrair URLs de mídia (M3U8/MPD) de páginas web, utilizando automação de navegador com Playwright. Ele suporta a detecção automática de DRM (Widevine/PlayReady) e gera arquivos `.m3u` compatíveis com players como o Kodi.
+
+## Instalação
+
+Para instalar o `allfinder`, siga os passos abaixo:
+
+1.  **Instale o Playwright e seus navegadores:**
+
+    O `allfinder` depende do Playwright para automação de navegador. Você precisa instalar o Playwright e os navegadores que ele utiliza (recomendamos o Chromium) manualmente. Abra seu terminal e execute:
+
+    ```bash
+    pip install playwright
+    playwright install chromium
+    ```
+
+    Se você estiver em um ambiente como o Google Colab ou tiver problemas de permissão, pode ser necessário usar `sudo` ou instalar as dependências do sistema:
+
+    ```bash
+    sudo playwright install chromium
+    sudo playwright install-deps chromium
+    ```
+
+2.  **Instale o allfinder:**
+
+    Você pode instalar a versão mais recente diretamente do GitHub:
+
+    ```bash
+    pip install --upgrade --no-cache-dir git+https://github.com/guiworldtv2/allfinder.git
+    ```
+
+    Para evitar problemas de cache em ambientes como o Google Colab, sempre use `--no-cache-dir`.
+
+## Uso
+
+Para usar o `allfinder`, basta fornecer a URL da página que contém o vídeo:
+
+```bash
+allfinder "SUA_URL_AQUI"
+```
+
+### Detecção de DRM
+
+O `allfinder` agora detecta automaticamente informações de DRM (Widevine/PlayReady) e as inclui na saída, se disponíveis. Você não precisa mais especificar a flag `--drm` explicitamente, a menos que queira forçar a exibição de informações técnicas de DRM mesmo quando não há uma saída de M3U8/MPD.
+
+Exemplo de uso (a detecção de DRM é automática):
+
+```bash
+allfinder "https://bitmovin.com/demos/drm/"
+```
+
+Se o DRM for detectado, o `allfinder` gerará um arquivo `.m3u` com as tags `#KODIPROP` contendo as chaves de licença, permitindo que players compatíveis reproduzam o conteúdo protegido.
+
+### Opções
+
+*   `--output FILENAME`: Salva a saída em um arquivo `.m3u` ou `.mpd`.
+*   `--browser BROWSER`: Especifica o navegador a ser usado (chromium, firefox, webkit).
+*   `--headless`: Executa o navegador em modo headless (sem interface gráfica). Padrão: `True`.
+*   `--timeout TIMEOUT`: Define o tempo limite para a operação do navegador em milissegundos. Padrão: `30000` (30 segundos).
+*   `--drm`: Exibe informações técnicas de DRM (PSSH, KID, License URL) na saída padrão, mesmo que não haja um M3U8/MPD para extrair. A detecção de DRM é automática e não requer esta flag para funcionar.
+
+## Desenvolvimento
+
+Para contribuir ou desenvolver o `allfinder` localmente:
+
+```bash
+git clone https://github.com/guiworldtv2/allfinder.git
+cd allfinder
+pip install -e .
+```
+
+Certifique-se de ter o Playwright e seus navegadores instalados conforme as instruções acima.
