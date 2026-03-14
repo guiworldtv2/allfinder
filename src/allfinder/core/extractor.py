@@ -494,7 +494,7 @@ class M3U8Extractor:
         print("[!] Captura de rede não encontrou URLs de mídia ou DRM. Tentando Crawl4AI...")
         try:
             crawl4ai = Crawl4AI()
-            result = await crawl4ai.extract(url)
+            result = await crawl4ai.acrawl(url)
 
             found_urls = []
             drm_info = None
