@@ -229,11 +229,11 @@ class M3U8Extractor:
                         `meta[property="${name}"], meta[name="${name}"],
                          meta[property="og:${name}"], meta[name="${name}"]`
                     );
-                    return el ? el.getAttribute('content') : null;
+                    return el ? el.getAttribute(\'content\') : null;
                 };
                 const titleSelectors = [
-                    'h1.video-title', 'h1.LiveVideo__Title', 'h1.video-info__title',
-                    '.VideoInfo__Title', '.video-title-container h1', '.headline', 'h1'
+                    \'h1.video-title\', \'h1.LiveVideo__Title\', \'h1.video-info__title\',
+                    \'.VideoInfo__Title\', \'.video-title-container h1\', \'.headline\', \'h1\'
                 ];
                 let foundTitle = null;
                 for (const sel of titleSelectors) {
@@ -242,13 +242,13 @@ class M3U8Extractor:
                         foundTitle = el.innerText.trim();
                     }
                 }
-                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
+                const metaTitle = getMeta(\'title\') || getMeta(\'og:title\') || getMeta(\'twitter:title\');
                 return {
                     title: foundTitle || metaTitle || document.title,
-                    og_image: getMeta('og:image'),
-                    twitter_image: getMeta('twitter:image'),
-                    poster: document.querySelector('video')
-                        ? document.querySelector('video').getAttribute('poster')
+                    og_image: getMeta(\'og:image\'),
+                    twitter_image: getMeta(\'twitter:image\'),
+                    poster: document.querySelector(\'video\')
+                        ? document.querySelector(\'video\').getAttribute(\'poster\')
                         : null
                 };
             }""")
@@ -312,7 +312,7 @@ class M3U8Extractor:
 
             # Mascaramento de automação
             await page.add_init_script(
-                'Object.defineProperty(navigator, "webdriver", {get: () => undefined});'
+                """Object.defineProperty(navigator, "webdriver", {get: () => undefined});"""
             )
 
             # Captura de rede
@@ -324,8 +324,16 @@ class M3U8Extractor:
                 await page.goto(url, timeout=self.timeout)
                 print("[*] Navegação concluída.")
 
-                # Lógica de interação do plugin e loop de espera de metadados removidos para depuração
-                # O Crawl4AI será chamado como fallback se nenhuma URL for encontrada após a navegação inicial.
+                # Lógica de interação do plugin
+                if plugin and hasattr(plugin, \'interact\'):
+                    await plugin.interact(page)
+
+                # Loop de espera e atualização de metadados
+                for _ in range(int(self.timeout / 2000)):
+                    await self._update_metadata(page)
+                    if self._capture.get_urls():
+                        break
+                    await asyncio.sleep(2)
 
             except Exception as e:
                 print(f"\n[!] Erro durante a navegação/interação: {e}")
