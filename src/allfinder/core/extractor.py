@@ -325,7 +325,7 @@ class M3U8Extractor:
                 print("[*] Navegação concluída.")
 
                 # Lógica de interação do plugin
-                if plugin and hasattr(plugin, \'interact\'):
+                if plugin and hasattr(plugin, 'interact'):
                     await plugin.interact(page)
 
                 # Loop de espera e atualização de metadados
