@@ -36,7 +36,7 @@ async def process_url(
     task_id = progress.add_task(f"[cyan]Processando: {url}", total=None)
 
     try:
-        data = await extractor.extract(url, plugin.interact)
+        data = await extractor.extract(url, plugin)
         progress.update(task_id, completed=True, description=f"[green]Concluído: {url}")
         return {
             "source_url": url,
