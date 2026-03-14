@@ -211,7 +211,7 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     async def _handle_request(self, request: Request):
-        """Callback legado para o evento \'request\'. Delega para o NetworkCapture."""
+        """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
         self._capture._process_url(request.url)
         self.found_urls = self._capture.get_urls()
         await self._handle_drm_request(request)
@@ -219,65 +219,6 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
     # Extração de metadados da página
     # -----------------------------------------------------------------------
-
-    async def _interact_with_page(self, page: Page):
-        """Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."""
-        print("[*] Tentando interagir com a página...")
-        try:
-            # Tenta aceitar cookies ou fechar popups
-            await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
-            print("[*] Clicou em \'Aceitar\' cookies.")
-        except Exception:
-            pass
-        try:
-            await page.locator("text=Concordar", has_text="Concordar").click(timeout=2000)
-            print("[*] Clicou em \'Concordar\' cookies.")
-        except Exception:
-            pass
-        try:
-            await page.locator("button:has-text(\'Entendi\')").click(timeout=2000)
-            print("[*] Clicou em \'Entendi\' (popup).")
-        except Exception:
-            pass
-
-        # Tenta clicar em botões de play genéricos
-        play_selectors = [
-            "button[aria-label=\'Play\']",
-            "button[title=\'Play\']",
-            ".vjs-big-play-button",
-            ".jw-icon-playback",
-            ".play-button",
-            ".video-play-button",
-            ".flickity-button-icon", # Fox News specific
-        ]
-        for selector in play_selectors:
-            try:
-                await page.locator(selector).click(timeout=2000)
-                print(f"[*] Clicou no botão de play: {selector}")
-                await asyncio.sleep(1) # Pequena pausa para o player iniciar
-                break
-            except Exception:
-                pass
-
-        # Rola a página para simular interação e carregar conteúdo lazy-loaded
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await asyncio.sleep(2) # Espera um pouco para o conteúdo carregar
-        await page.evaluate("window.scrollTo(0, 0)")
-        await asyncio.sleep(1)
-
-        # Tenta mover o mouse para o centro da tela para ativar elementos (se houver)
-        try:
-            viewport_size = page.viewport_size
-            if viewport_size:
-                await page.mouse.move(viewport_size["width"] / 2, viewport_size["height"] / 2)
-                await asyncio.sleep(0.5)
-        except Exception:
-            pass
-
-        # Espera por um curto período para que qualquer token ou stream dinâmico seja capturado
-        await asyncio.sleep(3) # Aumenta o tempo de espera para captura de tokens/DRM
-
-        print("[*] Interação com a página concluída.")
 
     async def _update_metadata(self, page: Page):
         """Extrai título e thumbnail da página via JavaScript injetado."""
@@ -288,11 +229,11 @@ class M3U8Extractor:
                         `meta[property="${name}"], meta[name="${name}"],
                          meta[property="og:${name}"], meta[name="${name}"]`
                     );
-                    return el ? el.getAttribute(\'content\') : null;
+                    return el ? el.getAttribute('content') : null;
                 };
                 const titleSelectors = [
-                    \'h1.video-title\', \'h1.LiveVideo__Title\', \'h1.video-info__title\',
-                    \'.VideoInfo__Title\', \'.video-title-container h1\', \'.headline\', \'h1\'
+                    'h1.video-title', 'h1.LiveVideo__Title', 'h1.video-info__title',
+                    '.VideoInfo__Title', '.video-title-container h1', '.headline', 'h1'
                 ];
                 let foundTitle = null;
                 for (const sel of titleSelectors) {
@@ -301,13 +242,13 @@ class M3U8Extractor:
                         foundTitle = el.innerText.trim();
                     }
                 }
-                const metaTitle = getMeta(\'title\') || getMeta(\'og:title\') || getMeta(\'twitter:title\');
+                const metaTitle = getMeta('title') || getMeta('og:title') || getMeta('twitter:title');
                 return {
                     title: foundTitle || metaTitle || document.title,
-                    og_image: getMeta(\'og:image\'),
-                    twitter_image: getMeta(\'twitter:image\'),
-                    poster: document.querySelector(\'video\')
-                        ? document.querySelector(\'video\').getAttribute(\'poster\')
+                    og_image: getMeta('og:image'),
+                    twitter_image: getMeta('twitter:image'),
+                    poster: document.querySelector('video')
+                        ? document.querySelector('video').getAttribute('poster')
                         : null
                 };
             }""")
@@ -388,11 +329,7 @@ class M3U8Extractor:
                     await plugin.interact(page)
 
                 # Loop de espera e atualização de metadados
-                for _ in range(int(self.timeout / 2000)):
-                    await self._update_metadata(page)
-                    if self._capture.has_urls():
-                        break
-                    await asyncio.sleep(2)
+                # Removido para simplificar e evitar travamentos, a captura de rede e Crawl4AI farão o trabalho
 
             except Exception as e:
                 print(f"\n[!] Erro durante a navegação/interação: {e}")
