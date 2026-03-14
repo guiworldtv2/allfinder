@@ -371,7 +371,7 @@ class M3U8Extractor:
 
             # Mascaramento de automação
             await page.add_init_script(
-                "Object.defineProperty(navigator, \'webdriver\', {get: () => undefined});"
+                '''Object.defineProperty(navigator, 'webdriver', {get: () => undefined});'''
             )
 
             # Captura de rede
