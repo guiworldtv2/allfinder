@@ -223,6 +223,7 @@ class M3U8Extractor:
     async def _interact_with_page(self, page: Page):
         """Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."""
         print("[*] Tentando interagir com a página...")
+        print(f"[*] URL atual antes da interação: {page.url}")
         try:
             # Tenta aceitar cookies ou fechar popups
             await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
@@ -398,11 +399,14 @@ class M3U8Extractor:
                     await plugin.interact(page)
 
                 # Loop de espera e atualização de metadados
-                for _ in range(int(self.timeout / 2000)):
+                for i in range(int(self.timeout / 2000)):
+                    print(f"[*] Loop de espera e atualização de metadados: Iteração {i+1}")
                     await self._update_metadata(page)
                     if self._capture.has_urls():
+                        print(f"[*] URLs encontradas na iteração {i+1}. Quebrando loop.")
                         break
                     await asyncio.sleep(2)
+                    print(f"[*] Aguardando 2 segundos na iteração {i+1}.")
 
             except Exception as e:
                 print(f"\n[!] Erro durante a navegação/interação: {e}")
