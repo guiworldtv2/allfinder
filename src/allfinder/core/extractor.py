@@ -220,64 +220,7 @@ class M3U8Extractor:
     # Extração de metadados da página
     # -----------------------------------------------------------------------
 
-    async def _interact_with_page(self, page: Page):
-        """Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."""
-        print("[*] Tentando interagir com a página...")
-        try:
-            # Tenta aceitar cookies ou fechar popups
-            await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
-            print("[*] Clicou em \'Aceitar\' cookies.")
-        except Exception:
-            pass
-        try:
-            await page.locator("text=Concordar", has_text="Concordar").click(timeout=2000)
-            print("[*] Clicou em \'Concordar\' cookies.")
-        except Exception:
-            pass
-        try:
-            await page.locator("button:has-text(\'Entendi\')").click(timeout=2000)
-            print("[*] Clicou em \'Entendi\' (popup).")
-        except Exception:
-            pass
 
-        # Tenta clicar em botões de play genéricos
-        play_selectors = [
-            "button[aria-label=\'Play\']",
-            "button[title=\'Play\']",
-            ".vjs-big-play-button",
-            ".jw-icon-playback",
-            ".play-button",
-            ".video-play-button",
-            ".flickity-button-icon", # Fox News specific
-        ]
-        for selector in play_selectors:
-            try:
-                await page.locator(selector).click(timeout=2000)
-                print(f"[*] Clicou no botão de play: {selector}")
-                await asyncio.sleep(1) # Pequena pausa para o player iniciar
-                break
-            except Exception:
-                pass
-
-        # Rola a página para simular interação e carregar conteúdo lazy-loaded
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await asyncio.sleep(2) # Espera um pouco para o conteúdo carregar
-        await page.evaluate("window.scrollTo(0, 0)")
-        await asyncio.sleep(1)
-
-        # Tenta mover o mouse para o centro da tela para ativar elementos (se houver)
-        try:
-            viewport_size = page.viewport_size
-            if viewport_size:
-                await page.mouse.move(viewport_size["width"] / 2, viewport_size["height"] / 2)
-                await asyncio.sleep(0.5)
-        except Exception:
-            pass
-
-        # Espera por um curto período para que qualquer token ou stream dinâmico seja capturado
-        await asyncio.sleep(3) # Aumenta o tempo de espera para captura de tokens/DRM
-
-        print("[*] Interação com a página concluída.")
 
     async def _update_metadata(self, page: Page):
         """Extrai título e thumbnail da página via JavaScript injetado."""
@@ -387,12 +330,8 @@ class M3U8Extractor:
                 if plugin and hasattr(plugin, 'interact'):
                     await plugin.interact(page)
 
-                # Loop de espera e atualização de metadados
-                for _ in range(int(self.timeout / 2000)):
-                    await self._update_metadata(page)
-                    if self._capture.has_urls():
-                        break
-                    await asyncio.sleep(2)
+                # Atualização de metadados (sem loop de espera)
+                await self._update_metadata(page)
 
             except Exception as e:
                 print(f"\n[!] Erro durante a navegação/interação: {e}")
