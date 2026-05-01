@@ -2,7 +2,7 @@
 import asyncio
 from playwright.async_api import Page
 
-class RdCanaisPlugin:
+class RdcanaisPlugin:
     async def interact(self, page: Page):
         print("[PLUGIN] Interagindo com a página rdcanais.com...")
         # Clicar no botão de play
