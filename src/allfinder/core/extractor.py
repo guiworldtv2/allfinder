@@ -1,35 +1,20 @@
 
-"""
-extractor.py
-============
-Módulo principal de extração de URLs de mídia (M3U8/MPD) via automação de
-navegador com Playwright.
-
-Melhorias em relação à versão anterior:
-- Integração com browser_profile.py: suporte a múltiplos navegadores (Chrome,
-  Edge, Firefox, Chromium) com reutilização de perfis existentes do usuário.
-- Integração com network_capture.py: captura de tráfego de rede mais robusta,
-  com blacklist ampliada, normalização e priorização de streams.
-- Suporte a contexto persistente do Playwright para reutilização de sessão.
-- Mascaramento de automação (--disable-blink-features=AutomationControlled).
-- Compatibilidade total com o fluxo anterior (cookies, yt-dlp, plugins).
-"""
-
 import asyncio
 import json
 import os
 import re
 import urllib.parse
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
+import importlib.util
 
 import validators
-from crawl4ai import AsyncWebCrawler as Crawl4AI
+
 from playwright.async_api import (
     Browser,
     BrowserContext,
     Page,
     Request,
-    async_playwright,
+async_playwright,
 )
 
 from allfinder.core.browser_profile import (
@@ -79,6 +64,7 @@ class M3U8Extractor:
         browser: str = "chromium",
         profile_name: Optional[str] = None,
         use_profile: bool = False,
+        plugin_name: Optional[str] = None,
     ):
         self.headless = headless
         self.timeout = timeout
@@ -87,6 +73,8 @@ class M3U8Extractor:
         self.browser_name = browser.lower()
         self.profile_name = profile_name
         self.use_profile = use_profile
+        self.plugin_name = plugin_name
+        self.plugin_instance = None
 
         # Estado interno (mantido para compatibilidade com plugins existentes)
         self.found_urls: List[str] = []
@@ -129,14 +117,15 @@ class M3U8Extractor:
             return None
 
         profile = get_profile(self.browser_name, self.profile_name)
-        if profile:
-            print(f"[*] Usando perfil \'{profile.profile_name}\' do {profile.browser.upper()}.")
+        if isinstance(profile, BrowserProfile):
+            print(f"[*] Usando perfil {profile.profile_name} do {profile.browser.upper()}.")
+            return profile
         else:
             print(
-                f"[!] Perfil \'{self.profile_name}\' não encontrado para {self.browser_name}. "
+                f"[!] Perfil {self.profile_name} não encontrado para {self.browser_name}. "
                 "Usando navegador sem perfil."
             )
-        return profile
+            return None
 
     # -----------------------------------------------------------------------
     # Parsing de cookies
@@ -211,287 +200,228 @@ class M3U8Extractor:
     # -----------------------------------------------------------------------
 
     async def _handle_request(self, request: Request):
-        """Callback legado para o evento \'request\'. Delega para o NetworkCapture."""
+        """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
         self._capture._process_url(request.url)
         self.found_urls = self._capture.get_urls()
-        await self._handle_drm_request(request)
+
 
     # -----------------------------------------------------------------------
     # Extração de metadados da página
     # -----------------------------------------------------------------------
 
-    async def _update_metadata(self, page: Page):
-        """Extrai título e thumbnail da página via JavaScript injetado."""
+    async def _interact_with_page(self, page: Page):
+        """Simula interação do usuário para carregar conteúdo dinâmico (clicar em play, aceitar cookies)."""
+        print("[*] Tentando interagir com a página...")
         try:
-            metadata = await page.evaluate("""() => {
-                const getMeta = (name) => {
-                    const el = document.querySelector(
-                        `meta[property="${name}"], meta[name="${name}"],
-                         meta[property="og:${name}"], meta[name="${name}"]`
-                    );
-                    return el ? el.getAttribute(\'content\') : null;
-                };
-                const titleSelectors = [
-                    \'h1.video-title\', \'h1.LiveVideo__Title\', \'h1.video-info__title\',
-                    \'.VideoInfo__Title\', \'.video-title-container h1\', \'.headline\', \'h1\'
-                ];
-                let foundTitle = null;
-                for (const sel of titleSelectors) {
-                    const el = document.querySelector(sel);
-                    if (el && el.innerText.trim().length > 5) {
-                        foundTitle = el.innerText.trim();
-                    }
-                }
-                const metaTitle = getMeta(\'title\') || getMeta(\'og:title\') || getMeta(\'twitter:title\');
-                return {
-                    title: foundTitle || metaTitle || document.title,
-                    og_image: getMeta(\'og:image\'),
-                    twitter_image: getMeta(\'twitter:image\'),
-                    poster: document.querySelector(\'video\')
-                        ? document.querySelector(\'video\').getAttribute(\'poster\')
-                        : null
-                };
-            }""")
+            # Tenta aceitar cookies ou fechar popups
+            await page.locator("text=Aceitar", has_text="Aceitar").click(timeout=2000)
+            print("[*] Clicou em 'Aceitar' cookies.")
+        except Exception:
+            pass
+        try:
+            await page.locator("text=Concordar", has_text="Concordar").click(timeout=2000)
+            print("[*] Clicou em 'Concordar' cookies.")
+        except Exception:
+            pass
+        try:
+            await page.locator("button:has-text('Entendi')").click(timeout=2000)
+            print("[*] Clicou em 'Entendi' (popup).")
+        except Exception:
+            pass
 
-            if metadata:
-                if metadata.get("title"):
-                    self.page_title = metadata["title"].strip()
-                thumbnail = (
-                    metadata.get("og_image")
-                    or metadata.get("twitter_image")
-                    or metadata.get("poster")
-                )
-                if thumbnail and validators.url(thumbnail):
-                    self.thumbnail_url = thumbnail
+        # Tenta clicar em botões de play genéricos
+        play_selectors = [
+            "button[aria-label='Play']",
+            "button[title='Play']",
+            ".vjs-big-play-button",
+            ".jw-icon-playback",
+            ".play-button",
+            ".video-play-button",
+            ".flickity-button-icon", # Fox News specific
+        ]
+        for selector in play_selectors:
+            try:
+                await page.locator(selector).click(timeout=2000)
+                print(f"[*] Clicou no botão de play: {selector}")
+                await asyncio.sleep(1) # Pequena pausa para o player iniciar
+                break
+            except Exception:
+                pass
 
-        except Exception as e:
-            print(f"\n[!] Erro ao extrair metadados: {e}")
 
-    # -----------------------------------------------------------------------
-    # Lógica principal de extração
-    # -----------------------------------------------------------------------
 
-    async def extract(self, url: str, plugin: Any) -> Dict[str, Any]:
+    async def _create_browser_context(self, playwright_instance) -> BrowserContext:
         """
-        Executa a extração de mídia para uma única URL.
+        Cria e configura um contexto de navegador com base nas opções fornecidas.
+        """
+        self._profile = self._resolve_profile() # Resolve o perfil aqui
 
-        Retorna um dicionário com as URLs encontradas, título e thumbnail.
+        launch_kwargs = build_playwright_launch_kwargs(self._profile, self.headless)
+        browser_type = getattr(playwright_instance, self.browser_name)
+
+        browser_context: BrowserContext
+        user_data_dir: Optional[str] = None
+
+        if self.use_profile and self._profile is not None:
+            user_data_dir = self._profile.user_data_dir
+        elif self.use_profile and self._profile is None:
+            print("[!] use_profile é True, mas _profile é None. Criando diretório de dados de usuário temporário.")
+            temp_user_data_dir = os.path.join(os.getcwd(), "temp_user_data_allfinder")
+            os.makedirs(temp_user_data_dir, exist_ok=True)
+            user_data_dir = temp_user_data_dir
+
+        if user_data_dir:
+            browser_context = await browser_type.launch_persistent_context(
+                user_data_dir,
+                **launch_kwargs,
+                timeout=self.timeout,
+            )
+        else:
+            browser = await browser_type.launch(**launch_kwargs)
+            browser_context = await browser.new_context()
+
+        # Configura cookies
+        if self.cookies_from_browser:
+            # Importar cookies do navegador (ainda não implementado)
+            print(f"[!] Importação de cookies de {self.cookies_from_browser} não implementada.")
+        elif self.cookies_file:
+            cookies = self._parse_cookies_file()
+            if cookies:
+                await browser_context.add_cookies(cookies)
+
+        return browser_context
+
+    async def extract(
+        self,
+        url: str,
+    ) -> Dict[str, Any]:
+        """
+        Extrai URLs de mídia de uma página web.
+
+        Parâmetros
+        ----------
+        url : str
+            A URL da página para extrair.
+        plugin : Callable[[Page], Any], opcional
+            Uma função assínrona que interage com a página para revelar conteúdo.
+
+        Retorna
+        -------
+        Dict[str, Any]
+            Um dicionário contendo as URLs de mídia encontradas, título e thumbnail.
         """
         if not self.validate_url(url):
-            return {
-                "urls": [],
-                "title": "URL Inválida",
-                "thumbnail": None,
-                "drm_info": None,
-            }
+            print(f"[!] URL inválida: {url}")
+            return {"title": "Erro", "urls": [], "thumbnail": None, "drm_info": None}
 
-        self._profile = self._resolve_profile()
-
-        if self._profile:
-            launch_kwargs = build_playwright_launch_kwargs(self._profile, self.headless)
-        else:
-            launch_kwargs = build_playwright_launch_kwargs(None, self.headless)
+        self._capture.reset()
+        self.found_urls = []
+        self.thumbnail_url = None
+        self.page_title = "Stream"
 
         async with async_playwright() as p:
-            browser_instance = p[self.browser_name]
-            try:
-                browser = await browser_instance.launch(**launch_kwargs)
-            except Exception as e:
-                if "looks like you are trying to access a browser that is not owned by this Playwright instance" in str(e):
-                    print("[!] Tentando lançar navegador a partir do executável do perfil...")
-                    if self._profile and self._profile.executable_path:
-                        launch_kwargs["executable_path"] = self._profile.executable_path
-                        browser = await browser_instance.launch(**launch_kwargs)
-                    else:
-                        raise e
-                else:
-                    raise e
+            browser_context = await self._create_browser_context(p)
+            page = await browser_context.new_page()
 
-            context = await self._create_browser_context(browser)
-            page = await context.new_page()
+            # Configura o timeout da página
+            page.set_default_timeout(self.timeout)
 
-            # Mascaramento de automação
-            await page.add_init_script(
-                """Object.defineProperty(navigator, "webdriver", {get: () => undefined});"""
-            )
-
-            # Captura de rede
+            # Adiciona o handler de requisições
             page.on("request", self._handle_request)
 
+            # Carrega e instancia o plugin, se houver
+            if self.plugin_name:
+                try:
+                    plugin_path = os.path.join(os.path.dirname(__file__), "..", "plugins", f"{self.plugin_name}.py")
+                    spec = importlib.util.spec_from_file_location(self.plugin_name, plugin_path)
+                    if spec and spec.loader:
+                        plugin_module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(plugin_module)
+                        # Assumindo que a classe do plugin tem o mesmo nome do arquivo (camel case)
+                        plugin_class_name = "".join(word.capitalize() for word in self.plugin_name.split("_")) + "Plugin"
+
+                        plugin_class = getattr(plugin_module, plugin_class_name)
+                        self.plugin_instance = plugin_class()
+                        print(f"[*] Plugin ", self.plugin_name, " carregado com sucesso.")
+                    else:
+                        print(f"[!] Não foi possível carregar o plugin: {self.plugin_name}")
+                except Exception as e:
+                    print(f"[!] Erro ao carregar plugin {self.plugin_name}: {e}")
+
             try:
-                print(f"[*] Navegando para: {url}...")
-                print(f"[*] Timeout configurado para page.goto: {self.timeout}ms")
-                await page.goto(url, timeout=self.timeout)
-                print("[*] Navegação concluída.")
+                print(f"[*] Navegando para: {url}")
+                await page.goto(url, wait_until="domcontentloaded")
+                print(f"[*] Navegação concluída para: {url}")
 
-                # Lógica de interação do plugin
-                if plugin and hasattr(plugin, 'interact'):
-                    await plugin.interact(page)
+                # Interage com a página se um plugin for fornecido
+                if self.plugin_instance:
+                    print("[*] Executando plugin de interação...")
+                    await self.plugin_instance.interact(page)
 
-                # Loop de espera e atualização de metadados
-                for _ in range(int(self.timeout / 2000)):
-                    await self._update_metadata(page)
-                    if self._capture.get_urls():
+                # Interação genérica (clicar em play, aceitar cookies)
+                await self._interact_with_page(page)
+
+                # Espera por um curto período para capturar requisições adicionais
+                await asyncio.sleep(5) # Ajuste conforme necessário
+
+                # Tenta obter o título da página
+                self.page_title = await page.title()
+
+                # Tenta obter a thumbnail (primeira imagem visível ou meta tag)
+                try:
+                    thumbnail_element = await page.query_selector("img")
+                    if thumbnail_element:
+                        self.thumbnail_url = await thumbnail_element.get_attribute("src")
+                except Exception:
+                    pass
+
+                # Loop para esperar por URLs e metadados
+                start_time = asyncio.get_event_loop().time()
+                while (asyncio.get_event_loop().time() - start_time) < (self.timeout / 1000):
+                    if self.found_urls and self.page_title != "Stream":
                         break
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(1)
 
             except Exception as e:
-                print(f"\n[!] Erro durante a navegação/interação: {e}")
-                print("[!] Tentando fallback com Crawl4AI devido a erro na navegação/interação.")
-
+                print(f"[!] Erro durante a extração: {e}")
             finally:
-                self.found_urls = self._capture.get_urls()
-                drm_info = self._capture.get_drm_info()
+                await browser_context.close()
 
-                await browser.close()
-
-        # Lógica de fallback com Crawl4AI
-        if not self.found_urls and not self._capture.get_drm_info():
-            crawl4ai_result = await self._run_crawl4ai_fallback(url)
-            if crawl4ai_result["urls"]:
-                self.found_urls.extend(crawl4ai_result["urls"])
-            if crawl4ai_result["drm_info"]:
-                self._capture._drm_info = crawl4ai_result["drm_info"]
+        # Limpa URLs duplicadas e retorna
+        unique_urls = list(set(self.found_urls))
+        drm_info_list = [] # DRM handling removed for now
 
         return {
-            "urls": self.found_urls,
             "title": self.page_title,
+            "urls": unique_urls,
             "thumbnail": self.thumbnail_url,
-            "drm_info": self._capture.get_drm_info(),
+            "drm_info": drm_info_list,
         }
 
-    async def _handle_drm_request(self, request: Request):
-        """Processa requisições de DRM para extrair license_url, PSSH e KID."""
-        # Widevine
-        if "widevine" in request.url and request.method == "POST":
-            try:
-                post_data = request.post_data_buffer
-                if post_data:
-                    # Tenta decodificar como JSON (PlayReady)
-                    try:
-                        data = json.loads(post_data.decode("utf-8"))
-                        if "challenge" in data:
-                            # Isso é mais comum para PlayReady, mas alguns Widevine podem usar
-                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=data.get("pssh"))
-                    except json.JSONDecodeError:
-                        # Se não for JSON, pode ser o formato binário do Widevine
-                        # O PSSH geralmente é encontrado no corpo da requisição
-                        pssh_match = re.search(b"\\x08\\x01\\x12\\x10(.{16})", post_data)
-                        if pssh_match:
-                            pssh_bytes = pssh_match.group(1)
-                            # Converte para base64 se necessário, ou mantém como bytes
-                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=pssh_bytes.hex())
-            except Exception as e:
-                print(f"[!] Erro ao processar requisição Widevine: {e}")
 
-        # PlayReady
-        elif "playready" in request.url and request.method == "POST":
-            try:
-                post_data = request.post_data_buffer
-                if post_data:
-                    # PlayReady geralmente envia um XML ou JSON
-                    try:
-                        data = json.loads(post_data.decode("utf-8"))
-                        # Lógica para extrair PSSH/KID de JSON PlayReady
-                        if "challenge" in data:
-                            self._capture._drm_info = DRMInfo(license_url=request.url, pssh=data.get("pssh"))
-                    except json.JSONDecodeError:
-                        # Tenta como XML
-                        if b"<Challenge>" in post_data:
-                            # Lógica para extrair PSSH/KID de XML PlayReady
-                            pssh_match = re.search(b"<Challenge>(.*?)</Challenge>", post_data)
-                            if pssh_match:
-                                pssh_base64 = pssh_match.group(1).decode("utf-8")
-                                self._capture._drm_info = DRMInfo(license_url=request.url, pssh=pssh_base64)
-            except Exception as e:
-                print(f"[!] Erro ao processar requisição PlayReady: {e}")
+# ---------------------------------------------------------------------------
+# Função de entrada para execução assíncrona
+# ---------------------------------------------------------------------------
 
-        # Tenta extrair KID de URLs de licença (comum em alguns sistemas)
-        kid_match = re.search(r"kid=([0-9a-fA-F]{32})", request.url)
-        if kid_match:
-            if not self._capture._drm_info:
-                self._capture._drm_info = DRMInfo()
-            self._capture._drm_info.kid = kid_match.group(1)
-
-    async def _run_crawl4ai_fallback(self, url: str) -> Dict[str, Any]:
-        """
-        Executa o Crawl4AI como fallback para extrair informações da página
-        quando a captura de rede padrão não encontra nada.
-        """
-        print("[!] Captura de rede não encontrou URLs de mídia ou DRM. Tentando Crawl4AI...")
-        try:
-            crawl4ai = Crawl4AI()
-            result = await crawl4ai.arun(url=url)
-
-            found_urls = []
-            drm_info = None
-
-            if result and result.media:
-                for video in result.media.get("videos", []):
-                    if video.get("src") and (".m3u8" in video.get("src") or ".mpd" in video.get("src")):
-                        found_urls.append(video.get("src"))
-                for audio in result.media.get("audios", []):
-                    if audio.get("src") and (".m3u8" in audio.get("src") or ".mpd" in audio.get("src")):
-                        found_urls.append(audio.get("src"))
-                if found_urls:
-                    print(f"[*] Crawl4AI encontrou {len(found_urls)} URLs de mídia.")
-
-            if result and result.drm_info:
-                # Adapta o formato do Crawl4AI para o DRMInfo do allfinder
-                c4ai_drm = result.drm_info
-                drm_info = DRMInfo(
-                    license_url=c4ai_drm.get("license_url"),
-                    pssh=c4ai_drm.get("pssh"),
-                    kid=c4ai_drm.get("kid"),
-                )
-                if drm_info.license_url or drm_info.pssh or drm_info.kid:
-                    print("[*] Crawl4AI encontrou informações de DRM.")
-
-            return {"urls": found_urls, "drm_info": drm_info}
-
-        except Exception as e:
-            print(f"[!] Erro ao executar Crawl4AI: {e}")
-            return {"urls": [], "drm_info": None}
-
-    async def _create_browser_context(self, browser: Browser) -> BrowserContext:
-        """
-        Cria um contexto de navegador com cookies e perfil, se aplicável.
-        """
-        context_kwargs = {}
-        if self._profile and self._profile.user_data_dir:
-            # Lança um contexto persistente se um perfil for usado
-            context = await browser.new_context(
-                user_agent=(self._profile.user_agent or None),
-                viewport=self._profile.viewport or None,
-                **context_kwargs
-            )
-        else:
-            # Contexto normal (não persistente)
-            context = await browser.new_context(**context_kwargs)
-
-        # Carrega cookies
-        cookies = self._parse_cookies_file()
-        if self.cookies_from_browser:
-            try:
-                from browser_cookie3 import load
-                domain = urllib.parse.urlparse(self.found_urls[0]).netloc if self.found_urls else ''
-                cj = load(self.cookies_from_browser, domain_name=domain)
-                for cookie in cj:
-                    cookies.append({
-                        "name": cookie.name,
-                        "value": cookie.value,
-                        "domain": cookie.domain,
-                        "path": cookie.path,
-                        "expires": cookie.expires or -1,
-                        "httpOnly": cookie.has_nonstandard_attr("HttpOnly"),
-                        "secure": cookie.secure,
-                    })
-            except ImportError:
-                print("[!] Para usar --cookies-from-browser, instale 'browser-cookie3'.")
-            except Exception as e:
-                print(f"[!] Erro ao carregar cookies do navegador: {e}")
-
-        if cookies:
-            await context.add_cookies(cookies)
-
-        return context
+async def run_extractor(
+    url: str,
+    headless: bool = True,
+    timeout: int = 30000,
+    cookies_from_browser: Optional[str] = None,
+    cookies_file: Optional[str] = None,
+    browser: str = "chromium",
+    profile_name: Optional[str] = None,
+    use_profile: bool = False,
+    plugin_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    extractor = M3U8Extractor(
+        headless=headless,
+        timeout=timeout,
+        cookies_from_browser=cookies_from_browser,
+        cookies_file=cookies_file,
+        browser=browser,
+        profile_name=profile_name,
+        use_profile=use_profile,
+        plugin_name=plugin_name,
+    )
+    return await extractor.extract(url)
