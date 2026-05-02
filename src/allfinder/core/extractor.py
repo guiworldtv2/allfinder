@@ -201,7 +201,7 @@ class M3U8Extractor:
 
     async def _handle_request(self, request: Request):
         """Callback legado para o evento 'request'. Delega para o NetworkCapture."""
-        self._capture._process_url(request.url)
+        await self._capture.handle_request_async(request)
         self.found_urls = self._capture.get_urls()
 
 
@@ -389,7 +389,15 @@ class M3U8Extractor:
 
         # Limpa URLs duplicadas e retorna
         unique_urls = list(set(self.found_urls))
-        drm_info_list = [] # DRM handling removed for now
+        
+        drm_info = self._capture.get_drm_info()
+        drm_info_list = []
+        if drm_info:
+            drm_info_list.append({
+                "license_url": drm_info.license_url,
+                "pssh": drm_info.pssh,
+                "kid": drm_info.kid
+            })
 
         return {
             "title": self.page_title,

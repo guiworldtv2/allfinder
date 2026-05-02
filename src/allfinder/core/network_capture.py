@@ -211,6 +211,31 @@ class NetworkCapture:
         """Versão assíncrona do handle_request (para uso com async/await)."""
         url = request.url
         self._process_url(url)
+        await self._process_drm_request(request)
+
+    async def _process_drm_request(self, request) -> None:
+        """
+        Analisa requisições em busca de informações de DRM (Widevine).
+        """
+        url = request.url
+        
+        # 1. Identificar URL de Licença Widevine
+        # Padrões comuns: /widevine, /license, /wv, /getLicense, etc.
+        if "widevine" in url.lower() or "license" in url.lower() or "getlicense" in url.lower():
+            if not self._drm_info:
+                self._drm_info = DRMInfo()
+            self._drm_info.license_url = url
+            
+            # Tentar extrair PSSH do corpo da requisição se for POST
+            if request.method == "POST":
+                try:
+                    post_data = request.post_data
+                    if post_data:
+                        # O PSSH costuma estar em base64 ou binário no corpo da requisição de licença
+                        # Esta é uma simplificação; extração real pode exigir parsing de protocolo buffer
+                        pass
+                except Exception:
+                    pass
 
     def _process_url(self, raw_url: str) -> None:
         """Processa uma URL bruta, verificando se é um stream válido."""
